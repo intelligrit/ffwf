@@ -7,6 +7,7 @@ struct ContentView: View {
     @State private var searchQuery = ""
     @State private var selectedIndex = 0
     @State private var previousResultCount = 0
+    @State private var refreshTimer: Timer?
     @FocusState private var isSearchFocused: Bool
 
     private var filteredWindows: [ScoredWindow] {
@@ -97,13 +98,25 @@ struct ContentView: View {
         }
         .frame(width: 600, height: 400)
         .onAppear {
+            // Initial refresh
             windowManager.refreshWindows()
             searchQuery = ""
             selectedIndex = 0
+
+            // Start continuous background refresh every 0.5 seconds
+            refreshTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+                windowManager.refreshWindows()
+            }
+
             // Small delay to ensure window is ready before focusing
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                 isSearchFocused = true
             }
+        }
+        .onDisappear {
+            // Stop the refresh timer when popover closes
+            refreshTimer?.invalidate()
+            refreshTimer = nil
         }
         .onKeyPress(.upArrow) {
             if selectedIndex > 0 {

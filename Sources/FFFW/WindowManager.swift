@@ -5,53 +5,59 @@ class WindowManager: ObservableObject {
     @Published var windows: [WindowInfo] = []
 
     func refreshWindows() {
-        var newWindows: [WindowInfo] = []
-        var windowID = 0
+        // Run window enumeration on background thread for speed
+        DispatchQueue.global(qos: .userInitiated).async {
+            var newWindows: [WindowInfo] = []
+            var windowID = 0
 
-        // Get ALL running applications (not just .regular ones)
-        let runningApps = NSWorkspace.shared.runningApplications
+            // Get ALL running applications (not just .regular ones)
+            let runningApps = NSWorkspace.shared.runningApplications
 
-        for app in runningApps {
-            let pid = app.processIdentifier
-            let appName = app.localizedName ?? "Unknown"
+            for app in runningApps {
+                let pid = app.processIdentifier
+                let appName = app.localizedName ?? "Unknown"
 
-            // Use AX API to get windows for this app
-            let axApp = AXUIElementCreateApplication(pid)
-            var windowsRef: CFTypeRef?
+                // Use AX API to get windows for this app
+                let axApp = AXUIElementCreateApplication(pid)
+                var windowsRef: CFTypeRef?
 
-            guard AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef) == .success,
-                  let axWindows = windowsRef as? [AXUIElement] else {
-                continue
-            }
-
-            for axWindow in axWindows {
-                // Get window title
-                var titleRef: CFTypeRef?
-                let title: String
-                if AXUIElementCopyAttributeValue(axWindow, kAXTitleAttribute as CFString, &titleRef) == .success,
-                   let axTitle = titleRef as? String {
-                    title = axTitle
-                } else {
-                    title = ""
+                guard AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef) == .success,
+                      let axWindows = windowsRef as? [AXUIElement] else {
+                    continue
                 }
 
-                // Skip windows without titles and app name
-                guard !title.isEmpty || !appName.isEmpty else { continue }
+                for axWindow in axWindows {
+                    // Get window title
+                    var titleRef: CFTypeRef?
+                    let title: String
+                    if AXUIElementCopyAttributeValue(axWindow, kAXTitleAttribute as CFString, &titleRef) == .success,
+                       let axTitle = titleRef as? String {
+                        title = axTitle
+                    } else {
+                        title = ""
+                    }
 
-                let windowInfo = WindowInfo(
-                    id: windowID,
-                    title: title,
-                    ownerName: appName,
-                    processID: pid,
-                    windowNumber: windowID
-                )
+                    // Skip windows without titles and app name
+                    guard !title.isEmpty || !appName.isEmpty else { continue }
 
-                newWindows.append(windowInfo)
-                windowID += 1
+                    let windowInfo = WindowInfo(
+                        id: windowID,
+                        title: title,
+                        ownerName: appName,
+                        processID: pid,
+                        windowNumber: windowID
+                    )
+
+                    newWindows.append(windowInfo)
+                    windowID += 1
+                }
+            }
+
+            // Update on main thread
+            DispatchQueue.main.async {
+                self.windows = newWindows
             }
         }
-
-        windows = newWindows
     }
 
     func activateWindow(_ window: WindowInfo) {

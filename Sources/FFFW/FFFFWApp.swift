@@ -30,9 +30,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
 
             // Accessibility
-            button.toolTip = "FFFW - Fast Fuzzy Find Windows (Cmd+Shift+Space)"
+            button.toolTip = "FFFW - Fast Fuzzy Find Windows (Option+Shift+Space)"
             button.setAccessibilityLabel("FFFW Window Finder")
-            button.setAccessibilityHelp("Click to search and switch windows, or press Command Shift Space")
+            button.setAccessibilityHelp("Click to search and switch windows, or press Option Shift Space")
         }
 
         // Create menu for right-click (but don't assign it yet)
@@ -90,7 +90,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func registerGlobalHotkey() {
-        // Register Cmd+Shift+Space
+        // Register Option+Shift+Space
         var hotKeyID = EventHotKeyID()
         hotKeyID.id = 1
         hotKeyID.signature = 0x46464657 // 'FFFW' as OSType
@@ -100,15 +100,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         eventType.eventKind = OSType(kEventHotKeyPressed)
 
         InstallEventHandler(GetApplicationEventTarget(), { (nextHandler, theEvent, userData) -> OSStatus in
-            if let appDelegate = userData?.assumingMemoryBound(to: AppDelegate.self).pointee {
-                DispatchQueue.main.async {
-                    appDelegate.togglePopover()
-                }
+            guard let userData = userData else { return noErr }
+            let appDelegate = Unmanaged<AppDelegate>.fromOpaque(userData).takeUnretainedValue()
+            DispatchQueue.main.async {
+                appDelegate.togglePopover()
             }
             return noErr
-        }, 1, &eventType, UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque()), nil)
+        }, 1, &eventType, Unmanaged.passUnretained(self).toOpaque(), nil)
 
-        RegisterEventHotKey(UInt32(kVK_Space), UInt32(cmdKey | shiftKey), hotKeyID, GetApplicationEventTarget(), 0, &hotkeyRef)
+        RegisterEventHotKey(UInt32(kVK_Space), UInt32(optionKey | shiftKey), hotKeyID, GetApplicationEventTarget(), 0, &hotkeyRef)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

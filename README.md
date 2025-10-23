@@ -5,7 +5,7 @@ A blazing-fast macOS menu bar app for switching windows with fuzzy search.
 ## Features
 
 - Lives in your menu bar - always accessible
-- Global hotkey: **Cmd+Shift+Space**
+- Global hotkey: **Option+Shift+Space**
 - Lightning-fast fuzzy matching of window titles and application names
 - Clean SwiftUI popover interface
 - Keyboard-driven navigation (Arrow keys + Enter)
@@ -49,7 +49,7 @@ Grant these in System Settings > Privacy & Security
 ## Usage
 
 1. Launch the app - a magnifying glass icon appears in your menu bar
-2. Click the icon or press **Cmd+Shift+Space** to show the window finder
+2. Click the icon or press **Option+Shift+Space** to show the window finder
 3. Start typing to fuzzy search window titles or app names
 4. Use ↑/↓ arrow keys to navigate results
 5. Press **Enter** to switch to the selected window

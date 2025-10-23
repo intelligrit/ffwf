@@ -3,7 +3,7 @@ import SwiftUI
 struct ContentView: View {
     let hideWindow: () -> Void
 
-    @StateObject private var windowManager = WindowManager()
+    @ObservedObject private var windowManager = WindowManager.shared
     @State private var searchQuery = ""
     @State private var selectedIndex = 0
     @State private var previousResultCount = 0
@@ -71,8 +71,19 @@ struct ContentView: View {
 
             // Results list
             ScrollViewReader { proxy in
-                List {
-                    ForEach(Array(filteredWindows.enumerated()), id: \.element.id) { index, scoredWindow in
+                if windowManager.windows.isEmpty {
+                    // Loading state
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                        Text("Loading windows...")
+                            .font(.system(size: 14))
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    List {
+                        ForEach(Array(filteredWindows.enumerated()), id: \.element.id) { index, scoredWindow in
                         WindowRow(
                             window: scoredWindow.window,
                             isSelected: index == selectedIndex,
@@ -104,22 +115,23 @@ struct ContentView: View {
                         .buttonStyle(.plain)
                         .listRowBackground(Color.clear)
                     }
-                }
-                .listStyle(.plain)
-                .accessibilityElement(children: .contain)
-                .accessibilityLabel("Window list")
-                .accessibilityHint("Use arrow keys to navigate, Enter to switch to window, Escape to close")
-                .onChange(of: selectedIndex) { _, newValue in
-                    withAnimation(.easeOut(duration: 0.1)) {
-                        proxy.scrollTo(newValue, anchor: .center)
                     }
-                }
-                .onChange(of: searchQuery) { _, _ in
-                    selectedIndex = 0
-                    resultLimit = 10 // Reset limit on new search
+                    .listStyle(.plain)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel("Window list")
+                    .accessibilityHint("Use arrow keys to navigate, Enter to switch to window, Escape to close")
+                    .onChange(of: selectedIndex) { _, newValue in
+                        withAnimation(.easeOut(duration: 0.1)) {
+                            proxy.scrollTo(newValue, anchor: .center)
+                        }
+                    }
+                    .onChange(of: searchQuery) { _, _ in
+                        selectedIndex = 0
+                        resultLimit = 10 // Reset limit on new search
 
-                    // Announce selected window immediately - speed is key
-                    announceSelectedWindow()
+                        // Announce selected window immediately - speed is key
+                        announceSelectedWindow()
+                    }
                 }
             }
             .accessibilityElement(children: .contain)

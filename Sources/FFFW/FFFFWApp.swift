@@ -49,6 +49,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Don't show in Dock
         NSApp.setActivationPolicy(.accessory)
+
+        // Start loading windows immediately at startup
+        WindowManager.shared.refreshWindows()
     }
 
     @objc func handleStatusItemClick(_ sender: Any?) {

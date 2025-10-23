@@ -2,6 +2,8 @@ import Cocoa
 import ApplicationServices
 
 class WindowManager: ObservableObject {
+    static let shared = WindowManager()
+
     @Published var windows: [WindowInfo] = []
     private var isRefreshing = false
     private let refreshLock = NSLock()

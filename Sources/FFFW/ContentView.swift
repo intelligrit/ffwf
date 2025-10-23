@@ -8,10 +8,19 @@ struct ContentView: View {
     @State private var selectedIndex = 0
     @State private var previousResultCount = 0
     @State private var refreshTimer: Timer?
+    @State private var resultLimit = 10
     @FocusState private var isSearchFocused: Bool
 
-    private var filteredWindows: [ScoredWindow] {
+    private var allFilteredWindows: [ScoredWindow] {
         FuzzyMatcher.filterWindows(windowManager.windows, query: searchQuery)
+    }
+
+    private var filteredWindows: [ScoredWindow] {
+        Array(allFilteredWindows.prefix(resultLimit))
+    }
+
+    private var hasMoreResults: Bool {
+        allFilteredWindows.count > resultLimit
     }
 
     private var resultCountAnnouncement: String {
@@ -62,18 +71,38 @@ struct ContentView: View {
 
             // Results list
             ScrollViewReader { proxy in
-                List(Array(filteredWindows.enumerated()), id: \.element.id) { index, scoredWindow in
-                    WindowRow(
-                        window: scoredWindow.window,
-                        isSelected: index == selectedIndex,
-                        index: index + 1,
-                        total: filteredWindows.count
-                    )
-                    .id(index)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        selectedIndex = index
-                        selectWindow()
+                List {
+                    ForEach(Array(filteredWindows.enumerated()), id: \.element.id) { index, scoredWindow in
+                        WindowRow(
+                            window: scoredWindow.window,
+                            isSelected: index == selectedIndex,
+                            index: index + 1,
+                            total: allFilteredWindows.count
+                        )
+                        .id(index)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            selectedIndex = index
+                            selectWindow()
+                        }
+                    }
+
+                    // "More results" button
+                    if hasMoreResults {
+                        Button(action: {
+                            resultLimit *= 2
+                        }) {
+                            HStack {
+                                Spacer()
+                                Text("Show more (\(allFilteredWindows.count - resultLimit) remaining)")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                            }
+                            .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.plain)
+                        .listRowBackground(Color.clear)
                     }
                 }
                 .listStyle(.plain)
@@ -87,6 +116,7 @@ struct ContentView: View {
                 }
                 .onChange(of: searchQuery) { _, _ in
                     selectedIndex = 0
+                    resultLimit = 10 // Reset limit on new search
 
                     // Announce selected window immediately - speed is key
                     announceSelectedWindow()
@@ -102,6 +132,7 @@ struct ContentView: View {
             windowManager.refreshWindows()
             searchQuery = ""
             selectedIndex = 0
+            resultLimit = 10 // Reset limit on open
 
             // Start continuous background refresh every 0.5 seconds
             refreshTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
@@ -162,9 +193,8 @@ struct WindowRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // App icon
-            if let app = NSRunningApplication(processIdentifier: window.processID),
-               let icon = app.icon {
+            // App icon (cached)
+            if let icon = window.icon {
                 Image(nsImage: icon)
                     .resizable()
                     .frame(width: 32, height: 32)

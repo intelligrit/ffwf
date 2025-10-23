@@ -26,6 +26,9 @@ class WindowManager: ObservableObject {
                     continue
                 }
 
+                // Get app icon once per app (not per window)
+                let appIcon = app.icon
+
                 for axWindow in axWindows {
                     // Get window title
                     var titleRef: CFTypeRef?
@@ -45,7 +48,8 @@ class WindowManager: ObservableObject {
                         title: title,
                         ownerName: appName,
                         processID: pid,
-                        windowNumber: windowID
+                        windowNumber: windowID,
+                        icon: appIcon
                     )
 
                     newWindows.append(windowInfo)

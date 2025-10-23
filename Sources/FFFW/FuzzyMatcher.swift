@@ -1,9 +1,29 @@
 import Foundation
 
 struct FuzzyMatcher {
-    /// Fast fuzzy matching with scoring (higher is better)
-    /// Supports space-separated terms that can match in any order
-    static func match(query: String, against text: String) -> Int? {
+
+    /// Filter and sort windows by fuzzy match score
+    static func filterWindows(_ windows: [WindowInfo], query: String) -> [ScoredWindow] {
+        guard !query.isEmpty else {
+            return windows.map { ScoredWindow(window: $0, score: 0) }
+        }
+
+        return windows.compactMap { window in
+            // Use pre-lowercased strings for performance
+            let titleScore = matchPreLowered(query: query, againstLower: window.titleLower, original: window.title) ?? 0
+            let ownerScore = matchPreLowered(query: query, againstLower: window.ownerNameLower, original: window.ownerName) ?? 0
+
+            let bestScore = max(titleScore, ownerScore)
+
+            guard bestScore > 0 else { return nil }
+
+            return ScoredWindow(window: window, score: bestScore)
+        }
+        .sorted { $0.score > $1.score }
+    }
+
+    /// Fast matching using pre-lowercased text
+    private static func matchPreLowered(query: String, againstLower textLower: String, original text: String) -> Int? {
         guard !query.isEmpty else { return 0 }
 
         // Split query by spaces to allow out-of-order matching
@@ -12,7 +32,7 @@ struct FuzzyMatcher {
         // All terms must match
         var totalScore = 0
         for term in terms {
-            guard let termScore = matchSingleTerm(term: term, against: text) else {
+            guard let termScore = matchSingleTermPreLowered(term: term, againstLower: textLower, original: text) else {
                 return nil // If any term doesn't match, the whole match fails
             }
             totalScore += termScore
@@ -21,12 +41,11 @@ struct FuzzyMatcher {
         return max(totalScore, 1) // Ensure valid matches always have positive score
     }
 
-    /// Match a single term (no spaces) against text
-    private static func matchSingleTerm(term: String, against text: String) -> Int? {
+    /// Match a single term using pre-lowercased text
+    private static func matchSingleTermPreLowered(term: String, againstLower textLower: String, original text: String) -> Int? {
         guard !term.isEmpty else { return 0 }
 
         let queryLower = term.lowercased()
-        let textLower = text.lowercased()
 
         var score = 0
         var queryIndex = queryLower.startIndex
@@ -79,25 +98,5 @@ struct FuzzyMatcher {
         }
 
         return score
-    }
-
-    /// Filter and sort windows by fuzzy match score
-    static func filterWindows(_ windows: [WindowInfo], query: String) -> [ScoredWindow] {
-        guard !query.isEmpty else {
-            return windows.map { ScoredWindow(window: $0, score: 0) }
-        }
-
-        return windows.compactMap { window in
-            let titleScore = match(query: query, against: window.title) ?? 0
-            let ownerScore = match(query: query, against: window.ownerName) ?? 0
-            let displayScore = match(query: query, against: window.displayName) ?? 0
-
-            let bestScore = max(titleScore, ownerScore, displayScore)
-
-            guard bestScore > 0 else { return nil }
-
-            return ScoredWindow(window: window, score: bestScore)
-        }
-        .sorted { $0.score > $1.score }
     }
 }

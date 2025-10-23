@@ -1,5 +1,23 @@
 import Foundation
 
+// Concurrent processing extension for better performance
+extension Array {
+    func concurrentCompactMap<T>(_ transform: @escaping (Element) -> T?) -> [T] {
+        let lock = NSLock()
+        var results: [T] = []
+
+        DispatchQueue.concurrentPerform(iterations: self.count) { index in
+            if let result = transform(self[index]) {
+                lock.lock()
+                results.append(result)
+                lock.unlock()
+            }
+        }
+
+        return results
+    }
+}
+
 struct FuzzyMatcher {
 
     /// Filter and sort windows by fuzzy match score
@@ -8,18 +26,29 @@ struct FuzzyMatcher {
             return windows.map { ScoredWindow(window: $0, score: 0) }
         }
 
-        return windows.compactMap { window in
-            // Use pre-lowercased strings for performance
-            let titleScore = matchPreLowered(query: query, againstLower: window.titleLower, original: window.title) ?? 0
-            let ownerScore = matchPreLowered(query: query, againstLower: window.ownerNameLower, original: window.ownerName) ?? 0
-
-            let bestScore = max(titleScore, ownerScore)
-
-            guard bestScore > 0 else { return nil }
-
-            return ScoredWindow(window: window, score: bestScore)
+        // Use concurrent processing for large window lists
+        let matches: [ScoredWindow]
+        if windows.count > 50 {
+            // Parallel processing for large lists
+            matches = windows.concurrentCompactMap { window in
+                let titleScore = matchPreLowered(query: query, againstLower: window.titleLower, original: window.title) ?? 0
+                let ownerScore = matchPreLowered(query: query, againstLower: window.ownerNameLower, original: window.ownerName) ?? 0
+                let bestScore = max(titleScore, ownerScore)
+                guard bestScore > 0 else { return nil }
+                return ScoredWindow(window: window, score: bestScore)
+            }
+        } else {
+            // Sequential for small lists (less overhead)
+            matches = windows.compactMap { window in
+                let titleScore = matchPreLowered(query: query, againstLower: window.titleLower, original: window.title) ?? 0
+                let ownerScore = matchPreLowered(query: query, againstLower: window.ownerNameLower, original: window.ownerName) ?? 0
+                let bestScore = max(titleScore, ownerScore)
+                guard bestScore > 0 else { return nil }
+                return ScoredWindow(window: window, score: bestScore)
+            }
         }
-        .sorted { $0.score > $1.score }
+
+        return matches.sorted { $0.score > $1.score }
     }
 
     /// Fast matching using pre-lowercased text

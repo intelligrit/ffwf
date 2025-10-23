@@ -22,53 +22,85 @@ class WindowManager: ObservableObject {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             var newWindows: [WindowInfo] = []
-            var windowID = 0
 
-            // Get ALL running applications (not just .regular ones)
-            let runningApps = NSWorkspace.shared.runningApplications
+            // Get running applications, filtering out background processes
+            let runningApps = NSWorkspace.shared.runningApplications.filter { app in
+                // Skip background processes and daemons that never have user windows
+                app.activationPolicy == .regular || app.activationPolicy == .accessory
+            }
+
+            // Process apps in parallel for speed
+            let queue = DispatchQueue(label: "window-enumeration", attributes: .concurrent)
+            let group = DispatchGroup()
+            let lock = NSLock()
 
             for app in runningApps {
-                let pid = app.processIdentifier
-                let appName = app.localizedName ?? "Unknown"
+                group.enter()
+                queue.async {
+                    defer { group.leave() }
+                    let pid = app.processIdentifier
+                    let appName = app.localizedName ?? "Unknown"
 
-                // Use AX API to get windows for this app
-                let axApp = AXUIElementCreateApplication(pid)
-                var windowsRef: CFTypeRef?
+                    // Use AX API to get windows for this app
+                    let axApp = AXUIElementCreateApplication(pid)
+                    var windowsRef: CFTypeRef?
 
-                guard AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef) == .success,
-                      let axWindows = windowsRef as? [AXUIElement] else {
-                    continue
-                }
-
-                // Get app icon once per app (not per window)
-                let appIcon = app.icon
-
-                for axWindow in axWindows {
-                    // Get window title
-                    var titleRef: CFTypeRef?
-                    let title: String
-                    if AXUIElementCopyAttributeValue(axWindow, kAXTitleAttribute as CFString, &titleRef) == .success,
-                       let axTitle = titleRef as? String {
-                        title = axTitle
-                    } else {
-                        title = ""
+                    guard AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef) == .success,
+                          let axWindows = windowsRef as? [AXUIElement] else {
+                        return
                     }
 
-                    // Skip windows without titles and app name
-                    guard !title.isEmpty || !appName.isEmpty else { continue }
+                    // Get app icon once per app (not per window)
+                    let appIcon = app.icon
 
-                    let windowInfo = WindowInfo(
-                        id: windowID,
-                        title: title,
-                        ownerName: appName,
-                        processID: pid,
-                        windowNumber: windowID,
-                        icon: appIcon
-                    )
+                    var appWindows: [WindowInfo] = []
 
-                    newWindows.append(windowInfo)
-                    windowID += 1
+                    for axWindow in axWindows {
+                        // Get window title
+                        var titleRef: CFTypeRef?
+                        let title: String
+                        if AXUIElementCopyAttributeValue(axWindow, kAXTitleAttribute as CFString, &titleRef) == .success,
+                           let axTitle = titleRef as? String {
+                            title = axTitle
+                        } else {
+                            title = ""
+                        }
+
+                        // Skip windows without titles and app name
+                        guard !title.isEmpty || !appName.isEmpty else { continue }
+
+                        let windowInfo = WindowInfo(
+                            id: 0, // Will be reassigned after sorting
+                            title: title,
+                            ownerName: appName,
+                            processID: pid,
+                            windowNumber: 0,
+                            icon: appIcon
+                        )
+
+                        appWindows.append(windowInfo)
+                    }
+
+                    // Thread-safe append
+                    lock.lock()
+                    newWindows.append(contentsOf: appWindows)
+                    lock.unlock()
                 }
+            }
+
+            // Wait for all apps to be processed
+            group.wait()
+
+            // Reassign IDs after all windows collected
+            for (index, window) in newWindows.enumerated() {
+                newWindows[index] = WindowInfo(
+                    id: index,
+                    title: window.title,
+                    ownerName: window.ownerName,
+                    processID: window.processID,
+                    windowNumber: index,
+                    icon: window.icon
+                )
             }
 
             // Update on main thread

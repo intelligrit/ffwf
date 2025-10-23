@@ -13,12 +13,7 @@ struct WindowInfo: Identifiable, Hashable {
     let titleLower: String
     let ownerNameLower: String
 
-    // Tab information (for Chrome, Terminal, etc.)
-    let isTab: Bool
-    let tabIndex: Int?
-    let windowIndex: Int?
-
-    init(id: Int, title: String, ownerName: String, processID: pid_t, windowNumber: Int, icon: NSImage?, isTab: Bool = false, tabIndex: Int? = nil, windowIndex: Int? = nil) {
+    init(id: Int, title: String, ownerName: String, processID: pid_t, windowNumber: Int, icon: NSImage?) {
         self.id = id
         self.title = title
         self.ownerName = ownerName
@@ -27,9 +22,6 @@ struct WindowInfo: Identifiable, Hashable {
         self.icon = icon
         self.titleLower = title.lowercased()
         self.ownerNameLower = ownerName.lowercased()
-        self.isTab = isTab
-        self.tabIndex = tabIndex
-        self.windowIndex = windowIndex
     }
 
     // Custom Hashable implementation since NSImage isn't Hashable

@@ -55,6 +55,18 @@ struct FuzzyMatcher {
     private static func matchPreLowered(query: String, againstLower textLower: String, original text: String) -> Int? {
         guard !query.isEmpty else { return 0 }
 
+        let queryLower = query.lowercased()
+
+        // Exact match bonus - prioritize exact matches
+        if textLower == queryLower {
+            return 10000 // Exact match always wins
+        }
+
+        // Starts with query bonus - strong preference
+        if textLower.hasPrefix(queryLower) {
+            return 5000 + (queryLower.count * 10) // Prefix match is very strong
+        }
+
         // Split query by spaces to allow out-of-order matching
         let terms = query.split(separator: " ").map { String($0) }
 

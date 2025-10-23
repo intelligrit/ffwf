@@ -26,15 +26,15 @@ clean: ## Clean build artifacts
 test: ## Run tests (if any)
 	swift test
 
-install: build-release ## Install to /usr/local/bin
-	@echo "Installing FFWF to /usr/local/bin..."
-	@mkdir -p /usr/local/bin
-	@cp .build/release/FFWF /usr/local/bin/ffwf
-	@echo "Installed! Run 'ffwf' to launch."
+install: app ## Install FFWF.app to /Applications
+	@echo "Installing FFWF.app to /Applications..."
+	@rm -rf /Applications/FFWF.app
+	@cp -r FFWF.app /Applications/
+	@echo "Installed! Launch from /Applications/FFWF.app or Spotlight."
 
-uninstall: ## Remove from /usr/local/bin
-	@echo "Removing FFWF from /usr/local/bin..."
-	@rm -f /usr/local/bin/ffwf
+uninstall: ## Remove FFWF.app from /Applications
+	@echo "Removing FFWF.app from /Applications..."
+	@rm -rf /Applications/FFWF.app
 	@echo "Uninstalled."
 
 package-info: ## Show package information

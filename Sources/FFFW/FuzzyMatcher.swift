@@ -2,11 +2,30 @@ import Foundation
 
 struct FuzzyMatcher {
     /// Fast fuzzy matching with scoring (higher is better)
-    /// Uses a simple but efficient algorithm inspired by Sublime Text
+    /// Supports space-separated terms that can match in any order
     static func match(query: String, against text: String) -> Int? {
         guard !query.isEmpty else { return 0 }
 
-        let queryLower = query.lowercased()
+        // Split query by spaces to allow out-of-order matching
+        let terms = query.split(separator: " ").map { String($0) }
+
+        // All terms must match
+        var totalScore = 0
+        for term in terms {
+            guard let termScore = matchSingleTerm(term: term, against: text) else {
+                return nil // If any term doesn't match, the whole match fails
+            }
+            totalScore += termScore
+        }
+
+        return max(totalScore, 1) // Ensure valid matches always have positive score
+    }
+
+    /// Match a single term (no spaces) against text
+    private static func matchSingleTerm(term: String, against text: String) -> Int? {
+        guard !term.isEmpty else { return 0 }
+
+        let queryLower = term.lowercased()
         let textLower = text.lowercased()
 
         var score = 0
@@ -54,13 +73,12 @@ struct FuzzyMatcher {
         guard queryIndex == queryLower.endIndex else { return nil }
 
         // Small penalty for length (prefer shorter matches but don't over-penalize)
-        // Use a logarithmic penalty so very long strings don't get huge negative scores
-        let lengthDiff = text.count - query.count
+        let lengthDiff = text.count - term.count
         if lengthDiff > 0 {
             score -= min(lengthDiff / 10, 10) // Max penalty of 10 points
         }
 
-        return max(score, 1) // Ensure valid matches always have positive score
+        return score
     }
 
     /// Filter and sort windows by fuzzy match score

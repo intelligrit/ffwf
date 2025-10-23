@@ -6,10 +6,22 @@ struct ContentView: View {
     @StateObject private var windowManager = WindowManager()
     @State private var searchQuery = ""
     @State private var selectedIndex = 0
+    @State private var previousResultCount = 0
     @FocusState private var isSearchFocused: Bool
 
     private var filteredWindows: [ScoredWindow] {
         FuzzyMatcher.filterWindows(windowManager.windows, query: searchQuery)
+    }
+
+    private var resultCountAnnouncement: String {
+        let count = filteredWindows.count
+        if count == 0 {
+            return "No windows found"
+        } else if count == 1 {
+            return "1 window found"
+        } else {
+            return "\(count) windows found"
+        }
     }
 
     var body: some View {
@@ -21,6 +33,9 @@ struct ContentView: View {
                 .padding(12)
                 .background(Color(NSColor.controlBackgroundColor))
                 .focused($isSearchFocused)
+                .accessibilityLabel("Search for windows")
+                .accessibilityHint("Type to filter windows by title or application name")
+                .accessibilityValue(searchQuery.isEmpty ? "Empty" : searchQuery)
                 .onSubmit {
                     selectWindow()
                 }
@@ -32,7 +47,9 @@ struct ContentView: View {
                 List(Array(filteredWindows.enumerated()), id: \.element.id) { index, scoredWindow in
                     WindowRow(
                         window: scoredWindow.window,
-                        isSelected: index == selectedIndex
+                        isSelected: index == selectedIndex,
+                        index: index + 1,
+                        total: filteredWindows.count
                     )
                     .id(index)
                     .contentShape(Rectangle())
@@ -42,6 +59,9 @@ struct ContentView: View {
                     }
                 }
                 .listStyle(.plain)
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel("Window list")
+                .accessibilityHint("Use arrow keys to navigate, Enter to switch to window, Escape to close")
                 .onChange(of: selectedIndex) { _, newValue in
                     withAnimation(.easeOut(duration: 0.1)) {
                         proxy.scrollTo(newValue, anchor: .center)
@@ -49,8 +69,21 @@ struct ContentView: View {
                 }
                 .onChange(of: searchQuery) { _, _ in
                     selectedIndex = 0
+
+                    // Announce result count change for VoiceOver
+                    let newCount = filteredWindows.count
+                    if newCount != previousResultCount {
+                        previousResultCount = newCount
+                        NSAccessibility.post(element: NSApp.mainWindow as Any, notification: .announcementRequested, userInfo: [
+                            .announcement: resultCountAnnouncement,
+                            .priority: NSAccessibilityPriorityLevel.medium.rawValue
+                        ])
+                    }
                 }
             }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Search results")
+            .accessibilityValue(resultCountAnnouncement)
         }
         .frame(width: 600, height: 400)
         .onAppear {
@@ -91,6 +124,16 @@ struct ContentView: View {
 struct WindowRow: View {
     let window: WindowInfo
     let isSelected: Bool
+    let index: Int
+    let total: Int
+
+    var accessibilityDescription: String {
+        let title = window.title.isEmpty ? window.ownerName : window.title
+        let app = window.title.isEmpty ? "" : ", \(window.ownerName)"
+        let position = "Window \(index) of \(total)"
+        let state = isSelected ? ", selected" : ""
+        return "\(title)\(app). \(position)\(state)"
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -100,6 +143,7 @@ struct WindowRow: View {
                 Image(nsImage: icon)
                     .resizable()
                     .frame(width: 32, height: 32)
+                    .accessibilityHidden(true)
             }
 
             VStack(alignment: .leading, spacing: 2) {
@@ -120,5 +164,9 @@ struct WindowRow: View {
         .padding(.horizontal, 8)
         .background(isSelected ? Color.accentColor.opacity(0.3) : Color.clear)
         .cornerRadius(4)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityDescription)
+        .accessibilityHint("Press Enter to switch to this window")
+        .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : [.isButton])
     }
 }

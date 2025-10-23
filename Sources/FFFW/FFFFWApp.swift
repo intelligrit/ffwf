@@ -24,10 +24,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "magnifyingglass.circle", accessibilityDescription: "FFFW")
+            button.image = NSImage(systemSymbolName: "magnifyingglass.circle", accessibilityDescription: "FFFW Window Finder")
             button.action = #selector(handleStatusItemClick)
             button.target = self
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+
+            // Accessibility
+            button.toolTip = "FFFW - Fast Fuzzy Find Windows (Cmd+Shift+Space)"
+            button.setAccessibilityLabel("FFFW Window Finder")
+            button.setAccessibilityHelp("Click to search and switch windows, or press Command Shift Space")
         }
 
         // Create menu for right-click (but don't assign it yet)

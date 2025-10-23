@@ -8,13 +8,10 @@ class WindowManager: ObservableObject {
         var newWindows: [WindowInfo] = []
         var windowID = 0
 
-        // Get all running applications
+        // Get ALL running applications (not just .regular ones)
         let runningApps = NSWorkspace.shared.runningApplications
 
         for app in runningApps {
-            // Skip background processes without UI
-            guard app.activationPolicy == .regular else { continue }
-
             let pid = app.processIdentifier
             let appName = app.localizedName ?? "Unknown"
 
@@ -41,22 +38,12 @@ class WindowManager: ObservableObject {
                 // Skip windows without titles and app name
                 guard !title.isEmpty || !appName.isEmpty else { continue }
 
-                // Get window number if available (for matching during activation)
-                var windowNumberRef: CFTypeRef?
-                var windowNumber = 0
-                if AXUIElementCopyAttributeValue(axWindow, kAXWindowAttribute as CFString, &windowNumberRef) == .success {
-                    // Window number might not be directly available through AX
-                    windowNumber = windowID
-                } else {
-                    windowNumber = windowID
-                }
-
                 let windowInfo = WindowInfo(
                     id: windowID,
                     title: title,
                     ownerName: appName,
                     processID: pid,
-                    windowNumber: windowNumber
+                    windowNumber: windowID
                 )
 
                 newWindows.append(windowInfo)

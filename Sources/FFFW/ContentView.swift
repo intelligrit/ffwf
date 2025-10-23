@@ -24,6 +24,23 @@ struct ContentView: View {
         }
     }
 
+    private func announceSelectedWindow() {
+        guard !filteredWindows.isEmpty, selectedIndex < filteredWindows.count else { return }
+
+        let window = filteredWindows[selectedIndex].window
+        let title = window.title.isEmpty ? window.ownerName : window.title
+        let app = window.title.isEmpty ? "" : ", \(window.ownerName)"
+        let announcement = "\(title)\(app)"
+
+        // Post announcement directly to the application
+        DispatchQueue.main.async {
+            NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested, userInfo: [
+                .announcement: announcement,
+                .priority: NSAccessibilityPriorityLevel.high.rawValue
+            ])
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Search field
@@ -70,15 +87,8 @@ struct ContentView: View {
                 .onChange(of: searchQuery) { _, _ in
                     selectedIndex = 0
 
-                    // Announce result count change for VoiceOver
-                    let newCount = filteredWindows.count
-                    if newCount != previousResultCount {
-                        previousResultCount = newCount
-                        NSAccessibility.post(element: NSApp.mainWindow as Any, notification: .announcementRequested, userInfo: [
-                            .announcement: resultCountAnnouncement,
-                            .priority: NSAccessibilityPriorityLevel.medium.rawValue
-                        ])
-                    }
+                    // Announce selected window immediately - speed is key
+                    announceSelectedWindow()
                 }
             }
             .accessibilityElement(children: .contain)
@@ -98,12 +108,14 @@ struct ContentView: View {
         .onKeyPress(.upArrow) {
             if selectedIndex > 0 {
                 selectedIndex -= 1
+                announceSelectedWindow()
             }
             return .handled
         }
         .onKeyPress(.downArrow) {
             if selectedIndex < filteredWindows.count - 1 {
                 selectedIndex += 1
+                announceSelectedWindow()
             }
             return .handled
         }

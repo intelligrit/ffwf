@@ -53,10 +53,14 @@ struct FuzzyMatcher {
         // Must match all query characters
         guard queryIndex == queryLower.endIndex else { return nil }
 
-        // Penalty for length (shorter matches are better)
-        score -= (text.count - query.count) / 2
+        // Small penalty for length (prefer shorter matches but don't over-penalize)
+        // Use a logarithmic penalty so very long strings don't get huge negative scores
+        let lengthDiff = text.count - query.count
+        if lengthDiff > 0 {
+            score -= min(lengthDiff / 10, 10) // Max penalty of 10 points
+        }
 
-        return score
+        return max(score, 1) // Ensure valid matches always have positive score
     }
 
     /// Filter and sort windows by fuzzy match score
@@ -66,13 +70,13 @@ struct FuzzyMatcher {
         }
 
         return windows.compactMap { window in
-            let titleScore = match(query: query, against: window.title) ?? -1
-            let ownerScore = match(query: query, against: window.ownerName) ?? -1
-            let displayScore = match(query: query, against: window.displayName) ?? -1
+            let titleScore = match(query: query, against: window.title) ?? 0
+            let ownerScore = match(query: query, against: window.ownerName) ?? 0
+            let displayScore = match(query: query, against: window.displayName) ?? 0
 
             let bestScore = max(titleScore, ownerScore, displayScore)
 
-            guard bestScore >= 0 else { return nil }
+            guard bestScore > 0 else { return nil }
 
             return ScoredWindow(window: window, score: bestScore)
         }

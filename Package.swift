@@ -2,16 +2,16 @@
 import PackageDescription
 
 let package = Package(
-    name: "FFFW",
+    name: "FFWF",
     platforms: [
         .macOS(.v14)
     ],
     products: [
-        .executable(name: "FFFW", targets: ["FFFW"])
+        .executable(name: "FFWF", targets: ["FFWF"])
     ],
     targets: [
         .executableTarget(
-            name: "FFFW",
+            name: "FFWF",
             path: "Sources"
         )
     ]

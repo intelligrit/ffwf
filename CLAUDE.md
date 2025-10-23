@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-FFFW (Fast Fuzzy Find Windows) is a macOS menu bar app for switching windows with fuzzy search. Built with Swift and SwiftUI, it runs persistently in the system tray and can be activated via global hotkey (Cmd+Shift+Space) or clicking the menu bar icon. The primary goal is maximum performance - fuzzy matching and UI updates must be instantaneous.
+FFWF (Fast Fuzzy Window Finder) is a macOS menu bar app for switching windows with fuzzy search. Built with Swift and SwiftUI, it runs persistently in the system tray and can be activated via global hotkey (Option+Shift+Space) or clicking the menu bar icon. The primary goal is maximum performance - fuzzy matching and UI updates must be instantaneous.
 
 ## Build Commands
 
@@ -19,7 +19,7 @@ swift build -c release
 swift run
 
 # Run release build
-.build/release/FFFW
+.build/release/FFWF
 ```
 
 ## Architecture
@@ -50,10 +50,10 @@ swift run
    - `@FocusState` ensures search field stays focused
    - Resets search query and selection on each appearance
 
-5. **FFFFWApp** (FFFFWApp.swift)
+5. **FFWFApp** (FFWFApp.swift)
    - Menu bar application (NSStatusItem) with magnifying glass icon
    - NSPopover for search interface (600x400)
-   - Global hotkey: Cmd+Shift+Space (registered via Carbon API)
+   - Global hotkey: Option+Shift+Space (registered via Carbon API)
    - Left-click icon or hotkey: toggle popover
    - Right-click icon: show quit menu
    - Runs as accessory (no Dock icon)
@@ -80,14 +80,14 @@ Permissions are declared in Info.plist with usage descriptions.
 ### Global Hotkey Implementation
 
 - Uses Carbon Event Manager APIs (`RegisterEventHotKey`, `InstallEventHandler`)
-- Default: Cmd+Shift+Space (can be modified in `registerGlobalHotkey()`)
+- Default: Option+Shift+Space (can be modified in `registerGlobalHotkey()`)
 - Registered on app launch, works system-wide
 - Shows popover when triggered
 
 ## Usage
 
 1. Launch app - icon appears in menu bar
-2. Click icon or press Cmd+Shift+Space to show search
+2. Click icon or press Option+Shift+Space to show search
 3. Type to fuzzy filter windows
 4. ↑/↓ arrows to navigate, Enter to switch
 5. Escape to hide without switching

@@ -1,4 +1,4 @@
-# FFFW - Fast Fuzzy Find Windows
+# FFWF - Fast Fuzzy Window Finder
 
 A blazing-fast macOS menu bar app for switching windows with fuzzy search.
 
@@ -24,7 +24,7 @@ A blazing-fast macOS menu bar app for switching windows with fuzzy search.
 swift build -c release
 ```
 
-The binary will be in `.build/release/FFFW`
+The binary will be in `.build/release/FFWF`
 
 ## Running
 
@@ -35,7 +35,7 @@ swift run
 Or run the built binary directly:
 
 ```bash
-.build/release/FFFW
+.build/release/FFWF
 ```
 
 ## Permissions

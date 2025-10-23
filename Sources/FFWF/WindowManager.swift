@@ -8,6 +8,41 @@ class WindowManager: ObservableObject {
     private var isRefreshing = false
     private let refreshLock = NSLock()
 
+    init() {
+        setupWorkspaceObservers()
+    }
+
+    private func setupWorkspaceObservers() {
+        let center = NSWorkspace.shared.notificationCenter
+
+        // Refresh when apps launch
+        center.addObserver(
+            forName: NSWorkspace.didLaunchApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.refreshWindows()
+        }
+
+        // Refresh when apps terminate
+        center.addObserver(
+            forName: NSWorkspace.didTerminateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.refreshWindows()
+        }
+
+        // Refresh when apps are activated (windows might become visible)
+        center.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.refreshWindows()
+        }
+    }
+
     func refreshWindows() {
         // Prevent concurrent refreshes
         refreshLock.lock()

@@ -140,16 +140,18 @@ struct ContentView: View {
         }
         .frame(width: 600, height: 400)
         .onAppear {
-            // Initial refresh
-            windowManager.refreshWindows()
+            // Show popover immediately with cached data, then refresh
             searchQuery = ""
             selectedIndex = 0
             resultLimit = 10 // Reset limit on open
 
-            // Start continuous background refresh every 0.5 seconds
+            // Start background refresh while popover is visible
             refreshTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
                 windowManager.refreshWindows()
             }
+
+            // Initial refresh
+            windowManager.refreshWindows()
 
             // Small delay to ensure window is ready before focusing
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {

@@ -5,42 +5,63 @@ class WindowManager: ObservableObject {
     @Published var windows: [WindowInfo] = []
 
     func refreshWindows() {
-        guard let windowList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
-            windows = []
-            return
-        }
-
         var newWindows: [WindowInfo] = []
-        var seenIDs = Set<Int>()
+        var windowID = 0
 
-        for dict in windowList {
-            guard let windowNumber = dict[kCGWindowNumber as String] as? Int,
-                  let ownerPID = dict[kCGWindowOwnerPID as String] as? pid_t,
-                  let bounds = dict[kCGWindowBounds as String] as? [String: CGFloat],
-                  let width = bounds["Width"], let height = bounds["Height"],
-                  width > 50, height > 50 else {
+        // Get all running applications
+        let runningApps = NSWorkspace.shared.runningApplications
+
+        for app in runningApps {
+            // Skip background processes without UI
+            guard app.activationPolicy == .regular else { continue }
+
+            let pid = app.processIdentifier
+            let appName = app.localizedName ?? "Unknown"
+
+            // Use AX API to get windows for this app
+            let axApp = AXUIElementCreateApplication(pid)
+            var windowsRef: CFTypeRef?
+
+            guard AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef) == .success,
+                  let axWindows = windowsRef as? [AXUIElement] else {
                 continue
             }
 
-            // Skip duplicates
-            guard !seenIDs.contains(windowNumber) else { continue }
-            seenIDs.insert(windowNumber)
+            for axWindow in axWindows {
+                // Get window title
+                var titleRef: CFTypeRef?
+                let title: String
+                if AXUIElementCopyAttributeValue(axWindow, kAXTitleAttribute as CFString, &titleRef) == .success,
+                   let axTitle = titleRef as? String {
+                    title = axTitle
+                } else {
+                    title = ""
+                }
 
-            let title = (dict[kCGWindowName as String] as? String) ?? ""
-            let ownerName = (dict[kCGWindowOwnerName as String] as? String) ?? ""
+                // Skip windows without titles and app name
+                guard !title.isEmpty || !appName.isEmpty else { continue }
 
-            // Skip windows without useful names
-            guard !title.isEmpty || !ownerName.isEmpty else { continue }
+                // Get window number if available (for matching during activation)
+                var windowNumberRef: CFTypeRef?
+                var windowNumber = 0
+                if AXUIElementCopyAttributeValue(axWindow, kAXWindowAttribute as CFString, &windowNumberRef) == .success {
+                    // Window number might not be directly available through AX
+                    windowNumber = windowID
+                } else {
+                    windowNumber = windowID
+                }
 
-            let windowInfo = WindowInfo(
-                id: windowNumber,
-                title: title,
-                ownerName: ownerName,
-                processID: ownerPID,
-                windowNumber: windowNumber
-            )
+                let windowInfo = WindowInfo(
+                    id: windowID,
+                    title: title,
+                    ownerName: appName,
+                    processID: pid,
+                    windowNumber: windowNumber
+                )
 
-            newWindows.append(windowInfo)
+                newWindows.append(windowInfo)
+                windowID += 1
+            }
         }
 
         windows = newWindows

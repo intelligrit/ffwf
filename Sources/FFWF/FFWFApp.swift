@@ -15,11 +15,20 @@ struct FFWFApp: App {
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
     var popover: NSPopover?
+    var settingsWindow: NSWindow?
     var eventMonitor: Any?
     var hotkeyRef: EventHotKeyRef?
+    var hotkeyEventHandler: EventHandlerRef?
     var menu: NSMenu?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Listen for hotkey changes
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(hotkeyDidChange),
+            name: .hotkeyChanged,
+            object: nil
+        )
         // Create status bar item
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
@@ -29,14 +38,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             button.target = self
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
 
-            // Accessibility
-            button.toolTip = "FFWF - Fast Fuzzy Window Finder (Option+Shift+Space)"
-            button.setAccessibilityLabel("FFWF Window Finder")
-            button.setAccessibilityHelp("Click to search and switch windows, or press Option Shift Space")
+            // Update tooltip with current hotkey
+            updateTooltip()
         }
 
         // Create menu for right-click (but don't assign it yet)
         menu = NSMenu()
+        menu?.addItem(NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ","))
+        menu?.addItem(NSMenuItem.separator())
         menu?.addItem(NSMenuItem(title: "Quit FFWF", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
 
         // Create popover
@@ -93,7 +102,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func registerGlobalHotkey() {
-        // Register Option+Shift+Space
+        // Unregister existing hotkey if any
+        if let existingRef = hotkeyRef {
+            UnregisterEventHotKey(existingRef)
+            hotkeyRef = nil
+        }
+
+        // Remove existing event handler if any
+        if let existingHandler = hotkeyEventHandler {
+            RemoveEventHandler(existingHandler)
+            hotkeyEventHandler = nil
+        }
+
+        // Get hotkey from settings
+        let hotkey = HotkeySettings.shared.hotkey
+
         var hotKeyID = EventHotKeyID()
         hotKeyID.id = 1
         hotKeyID.signature = 0x46464657 // 'FFFW' as OSType
@@ -102,6 +125,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         eventType.eventClass = OSType(kEventClassKeyboard)
         eventType.eventKind = OSType(kEventHotKeyPressed)
 
+        var handler: EventHandlerRef?
         InstallEventHandler(GetApplicationEventTarget(), { (nextHandler, theEvent, userData) -> OSStatus in
             guard let userData = userData else { return noErr }
             let appDelegate = Unmanaged<AppDelegate>.fromOpaque(userData).takeUnretainedValue()
@@ -109,9 +133,46 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 appDelegate.togglePopover()
             }
             return noErr
-        }, 1, &eventType, Unmanaged.passUnretained(self).toOpaque(), nil)
+        }, 1, &eventType, Unmanaged.passUnretained(self).toOpaque(), &handler)
 
-        RegisterEventHotKey(UInt32(kVK_Space), UInt32(optionKey | shiftKey), hotKeyID, GetApplicationEventTarget(), 0, &hotkeyRef)
+        hotkeyEventHandler = handler
+
+        RegisterEventHotKey(hotkey.keyCode, hotkey.modifiers, hotKeyID, GetApplicationEventTarget(), 0, &hotkeyRef)
+    }
+
+    @objc func hotkeyDidChange() {
+        registerGlobalHotkey()
+        updateTooltip()
+    }
+
+    func updateTooltip() {
+        let hotkey = HotkeySettings.shared.hotkey
+        let tooltip = "FFWF - Fast Fuzzy Window Finder (\(hotkey.displayString))"
+
+        if let button = statusItem?.button {
+            button.toolTip = tooltip
+            button.setAccessibilityLabel("FFWF Window Finder")
+            button.setAccessibilityHelp("Click to search and switch windows, or press \(hotkey.displayString)")
+        }
+    }
+
+    @objc func showSettings() {
+        // Create or show settings window
+        if settingsWindow == nil {
+            let settingsView = SettingsView()
+            let hostingController = NSHostingController(rootView: settingsView)
+
+            let window = NSWindow(contentViewController: hostingController)
+            window.title = "FFWF Settings"
+            window.styleMask = [.titled, .closable]
+            window.center()
+            window.setFrameAutosaveName("SettingsWindow")
+
+            settingsWindow = window
+        }
+
+        settingsWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

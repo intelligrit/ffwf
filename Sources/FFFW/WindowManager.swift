@@ -3,10 +3,22 @@ import ApplicationServices
 
 class WindowManager: ObservableObject {
     @Published var windows: [WindowInfo] = []
+    private var isRefreshing = false
+    private let refreshLock = NSLock()
 
     func refreshWindows() {
+        // Prevent concurrent refreshes
+        refreshLock.lock()
+        guard !isRefreshing else {
+            refreshLock.unlock()
+            return
+        }
+        isRefreshing = true
+        refreshLock.unlock()
+
         // Run window enumeration on background thread for speed
-        DispatchQueue.global(qos: .userInitiated).async {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
             var newWindows: [WindowInfo] = []
             var windowID = 0
 
@@ -57,14 +69,135 @@ class WindowManager: ObservableObject {
                 }
             }
 
+            // Enumerate tabs from Chrome
+            windowID = self.enumerateChromeTabs(startingID: windowID, into: &newWindows)
+
+            // Enumerate tabs from Terminal
+            windowID = self.enumerateTerminalTabs(startingID: windowID, into: &newWindows)
+
             // Update on main thread
             DispatchQueue.main.async {
                 self.windows = newWindows
+
+                // Clear refresh lock
+                self.refreshLock.lock()
+                self.isRefreshing = false
+                self.refreshLock.unlock()
             }
         }
     }
 
+    private func enumerateChromeTabs(startingID: Int, into windows: inout [WindowInfo]) -> Int {
+        var windowID = startingID
+
+        // Check if Chrome is running
+        guard let chrome = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "com.google.Chrome" }) else {
+            return windowID
+        }
+
+        let script = """
+        tell application "Google Chrome"
+            set output to ""
+            repeat with w from 1 to count of windows
+                repeat with t from 1 to count of tabs of window w
+                    set output to output & (title of tab t of window w) & "|" & w & "|" & t & "\\n"
+                end repeat
+            end repeat
+            return output
+        end tell
+        """
+
+        guard let appleScript = NSAppleScript(source: script),
+              let result = appleScript.executeAndReturnError(nil).stringValue else {
+            return windowID
+        }
+
+        // Parse line-by-line with pipe delimiter
+        let lines = result.components(separatedBy: "\n")
+        for line in lines {
+            let parts = line.components(separatedBy: "|")
+            guard parts.count == 3 else { continue }
+
+            let title = parts[0]
+            guard let winIndex = Int(parts[1]), let tabIndex = Int(parts[2]) else { continue }
+
+            let windowInfo = WindowInfo(
+                id: windowID,
+                title: title,
+                ownerName: "Chrome",
+                processID: chrome.processIdentifier,
+                windowNumber: windowID,
+                icon: chrome.icon,
+                isTab: true,
+                tabIndex: tabIndex,
+                windowIndex: winIndex
+            )
+            windows.append(windowInfo)
+            windowID += 1
+        }
+
+        return windowID
+    }
+
+    private func enumerateTerminalTabs(startingID: Int, into windows: inout [WindowInfo]) -> Int {
+        var windowID = startingID
+
+        // Check if Terminal is running
+        guard let terminal = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "com.apple.Terminal" }) else {
+            return windowID
+        }
+
+        let script = """
+        tell application "Terminal"
+            set output to ""
+            repeat with w from 1 to count of windows
+                repeat with t from 1 to count of tabs of window w
+                    set output to output & (name of tab t of window w) & "|" & w & "|" & t & "\\n"
+                end repeat
+            end repeat
+            return output
+        end tell
+        """
+
+        guard let appleScript = NSAppleScript(source: script),
+              let result = appleScript.executeAndReturnError(nil).stringValue else {
+            return windowID
+        }
+
+        // Parse line-by-line with pipe delimiter
+        let lines = result.components(separatedBy: "\n")
+        for line in lines {
+            let parts = line.components(separatedBy: "|")
+            guard parts.count == 3 else { continue }
+
+            let title = parts[0]
+            guard let winIndex = Int(parts[1]), let tabIndex = Int(parts[2]) else { continue }
+
+            let windowInfo = WindowInfo(
+                id: windowID,
+                title: title,
+                ownerName: "Terminal",
+                processID: terminal.processIdentifier,
+                windowNumber: windowID,
+                icon: terminal.icon,
+                isTab: true,
+                tabIndex: tabIndex,
+                windowIndex: winIndex
+            )
+            windows.append(windowInfo)
+            windowID += 1
+        }
+
+        return windowID
+    }
+
     func activateWindow(_ window: WindowInfo) {
+        // Handle tabs specially
+        if window.isTab, let winIndex = window.windowIndex, let tabIndex = window.tabIndex {
+            activateTab(window: window, windowIndex: winIndex, tabIndex: tabIndex)
+            return
+        }
+
         // Get the application by PID
         let app = NSRunningApplication(processIdentifier: window.processID)
         app?.activate()
@@ -94,5 +227,34 @@ class WindowManager: ObservableObject {
                 AXUIElementPerformAction(firstWindow, kAXRaiseAction as CFString)
             }
         }
+    }
+
+    private func activateTab(window: WindowInfo, windowIndex: Int, tabIndex: Int) {
+        // Activate the application first
+        let app = NSRunningApplication(processIdentifier: window.processID)
+        app?.activate()
+
+        // Use AppleScript to switch to the specific tab
+        let script: String
+        if window.ownerName == "Chrome" {
+            script = """
+            tell application "Google Chrome"
+                set index of window \(windowIndex) to 1
+                set active tab index of window \(windowIndex) to \(tabIndex)
+            end tell
+            """
+        } else if window.ownerName == "Terminal" {
+            script = """
+            tell application "Terminal"
+                set index of window \(windowIndex) to 1
+                set selected tab of window \(windowIndex) to tab \(tabIndex) of window \(windowIndex)
+            end tell
+            """
+        } else {
+            return
+        }
+
+        let appleScript = NSAppleScript(source: script)
+        appleScript?.executeAndReturnError(nil)
     }
 }

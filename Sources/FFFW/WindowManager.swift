@@ -107,8 +107,9 @@ class WindowManager: ObservableObject {
         end tell
         """
 
+        var error: NSDictionary?
         guard let appleScript = NSAppleScript(source: script),
-              let result = appleScript.executeAndReturnError(nil).stringValue else {
+              let result = appleScript.executeAndReturnError(&error).stringValue else {
             return windowID
         }
 
@@ -151,16 +152,23 @@ class WindowManager: ObservableObject {
         tell application "Terminal"
             set output to ""
             repeat with w from 1 to count of windows
-                repeat with t from 1 to count of tabs of window w
-                    set output to output & (name of tab t of window w) & "|" & w & "|" & t & "\\n"
-                end repeat
+                tell window w
+                    repeat with t from 1 to count of tabs
+                        set tabName to custom title of tab t
+                        if tabName is missing value or tabName is "" then
+                            set tabName to "Terminal"
+                        end if
+                        set output to output & tabName & "|" & w & "|" & t & "\\n"
+                    end repeat
+                end tell
             end repeat
             return output
         end tell
         """
 
+        var error: NSDictionary?
         guard let appleScript = NSAppleScript(source: script),
-              let result = appleScript.executeAndReturnError(nil).stringValue else {
+              let result = appleScript.executeAndReturnError(&error).stringValue else {
             return windowID
         }
 
@@ -247,7 +255,9 @@ class WindowManager: ObservableObject {
             script = """
             tell application "Terminal"
                 set index of window \(windowIndex) to 1
-                set selected tab of window \(windowIndex) to tab \(tabIndex) of window \(windowIndex)
+                tell window \(windowIndex)
+                    set selected tab to tab \(tabIndex)
+                end tell
             end tell
             """
         } else {

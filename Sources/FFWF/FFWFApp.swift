@@ -245,7 +245,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         An Intelligrit Open Source Product
         https://intelligrit.com/open-source/
 
-        © 2025 Intelligrit
+        © 2025 Intelligrit, LLC
         """
         alert.alertStyle = .informational
         alert.addButton(withTitle: "OK")

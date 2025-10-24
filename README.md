@@ -221,4 +221,4 @@ https://intelligrit.com/open-source/
 Built with Swift and SwiftUI.
 Fuzzy matching algorithm inspired by Sublime Text's Goto Anything feature.
 
-© 2025 Intelligrit
+© 2025 Intelligrit, LLC

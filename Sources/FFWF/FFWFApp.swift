@@ -243,13 +243,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         A blazing-fast macOS menu bar app for switching windows with fuzzy search.
 
         An Intelligrit Labs Product
-        https://intelligrit.com/labs/
 
         © 2025 Intelligrit, LLC
         """
         alert.alertStyle = .informational
+        alert.addButton(withTitle: "Visit Intelligrit Labs")
         alert.addButton(withTitle: "OK")
-        alert.runModal()
+
+        let response = alert.runModal()
+
+        if response == .alertFirstButtonReturn {
+            // Open Intelligrit Labs website
+            if let url = URL(string: "https://intelligrit.com/labs/") {
+                NSWorkspace.shared.open(url)
+            }
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

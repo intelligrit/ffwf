@@ -3,7 +3,7 @@
 .DEFAULT_GOAL := help
 
 # Version information
-VERSION := 1.0.0
+VERSION := 1.1.2
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'

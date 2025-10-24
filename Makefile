@@ -38,6 +38,9 @@ install: clean app ## Install FFWF.app to /Applications (forces rebuild)
 	@# Kill any running instances
 	@pkill -x FFWF 2>/dev/null || true
 	@sleep 0.5
+	@# Reset TCC permissions for fresh start
+	@echo "Resetting Accessibility permissions..."
+	@tccutil reset Accessibility com.robertmeta.FFWF 2>/dev/null || true
 	@# Remove old version
 	@rm -rf /Applications/FFWF.app
 	@# Copy new version
@@ -45,7 +48,9 @@ install: clean app ## Install FFWF.app to /Applications (forces rebuild)
 	@# Verify installation
 	@if [ -d /Applications/FFWF.app ]; then \
 		echo "✓ Successfully installed FFWF v$(VERSION) to /Applications/"; \
+		echo "✓ Accessibility permissions reset"; \
 		echo "  Launch from Spotlight (⌘Space → 'FFWF') or /Applications/FFWF.app"; \
+		echo "  Grant Accessibility access when prompted"; \
 	else \
 		echo "✗ Installation failed!"; \
 		exit 1; \

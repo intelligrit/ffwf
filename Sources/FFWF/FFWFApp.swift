@@ -242,8 +242,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         A blazing-fast macOS menu bar app for switching windows with fuzzy search.
 
-        An Intelligrit Open Source Product
-        https://intelligrit.com/open-source/
+        An Intelligrit Labs Product
+        https://intelligrit.com/labs/
 
         © 2025 Intelligrit, LLC
         """

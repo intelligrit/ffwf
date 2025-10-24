@@ -1,9 +1,13 @@
-.PHONY: help run build build-release build-debug clean install uninstall test app app-signed version
+.PHONY: help run build build-release build-debug clean install uninstall test app app-signed version reset-permissions sign
 
 .DEFAULT_GOAL := help
 
 # Version information
 VERSION := 1.1.2
+
+# Code signing identity (set to your Developer ID or leave as "-" for ad-hoc)
+# Example: SIGNING_IDENTITY := "Developer ID Application: Your Name (TEAM_ID)"
+SIGNING_IDENTITY := -
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -58,6 +62,27 @@ uninstall: ## Remove FFWF.app from /Applications
 version: ## Show version information
 	@echo "FFWF version $(VERSION)"
 
+reset-permissions: ## Reset Accessibility permissions (needed after clean builds during development)
+	@echo "Resetting Accessibility permissions for FFWF..."
+	@pkill -x FFWF 2>/dev/null || true
+	@sleep 0.5
+	@tccutil reset Accessibility com.robertmeta.FFWF 2>/dev/null || echo "Note: Permission reset may require manual action in System Settings"
+	@echo "✓ Permissions reset."
+	@echo "  Launch FFWF and grant Accessibility access when prompted."
+
+sign: ## Show available code signing identities
+	@echo "Available code signing identities:"
+	@security find-identity -v -p codesigning | grep "Developer ID Application" || echo "No Developer ID certificates found"
+	@echo ""
+	@echo "Current signing identity: $(SIGNING_IDENTITY)"
+	@echo ""
+	@echo "To use a Developer ID:"
+	@echo "  1. Get the full identity name from above"
+	@echo "  2. Edit Makefile and set SIGNING_IDENTITY to the full name"
+	@echo "  Example: SIGNING_IDENTITY := \"Developer ID Application: Your Name (TEAM_ID)\""
+	@echo ""
+	@echo "For development, ad-hoc signing (\"-\") is fine but permissions reset after each rebuild."
+
 package-info: ## Show package information
 	swift package describe
 
@@ -103,8 +128,9 @@ app: build-release ## Build macOS app bundle (FFWF.app)
 	@echo '</dict>' >> FFWF.app/Contents/Info.plist
 	@echo '</plist>' >> FFWF.app/Contents/Info.plist
 	@# Code sign with entitlements
-	@codesign --force --deep --sign - --entitlements FFWF.entitlements FFWF.app
+	@codesign --force --deep --sign $(SIGNING_IDENTITY) --entitlements FFWF.entitlements FFWF.app
 	@echo "✓ FFWF.app created and signed successfully!"
+	@echo "  Signing identity: $(SIGNING_IDENTITY)"
 	@echo "  To install: make install"
 	@echo "  To run: open FFWF.app"
 

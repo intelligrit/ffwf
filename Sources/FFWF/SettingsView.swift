@@ -1,4 +1,40 @@
 import SwiftUI
+import ServiceManagement
+
+class LoginItemManager: ObservableObject {
+    static let shared = LoginItemManager()
+
+    @Published var isEnabled: Bool {
+        didSet {
+            setLoginItemEnabled(isEnabled)
+        }
+    }
+
+    private init() {
+        // Check current status
+        self.isEnabled = SMAppService.mainApp.status == .enabled
+    }
+
+    private func setLoginItemEnabled(_ enabled: Bool) {
+        do {
+            if enabled {
+                if SMAppService.mainApp.status == .enabled {
+                    // Already enabled
+                    return
+                }
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+        } catch {
+            print("Failed to \(enabled ? "enable" : "disable") login item: \(error)")
+            // Revert the published value on failure
+            DispatchQueue.main.async {
+                self.isEnabled = SMAppService.mainApp.status == .enabled
+            }
+        }
+    }
+}
 
 class HotkeySettings: ObservableObject {
     static let shared = HotkeySettings()
@@ -30,6 +66,7 @@ class HotkeySettings: ObservableObject {
 
 struct SettingsView: View {
     @ObservedObject var settings = HotkeySettings.shared
+    @ObservedObject var loginManager = LoginItemManager.shared
     @Environment(\.dismiss) var dismiss
 
     var body: some View {
@@ -71,13 +108,37 @@ struct SettingsView: View {
             .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
             .cornerRadius(8)
 
+            // Launch at Login setting
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Startup")
+                    .font(.system(size: 14, weight: .medium))
+
+                Toggle("Launch at Login", isOn: $loginManager.isEnabled)
+                    .toggleStyle(.switch)
+
+                Text("Automatically start FFWF when you log in")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+            .padding()
+            .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+            .cornerRadius(8)
+
             Spacer()
 
             // Footer
             HStack {
-                Text("Changes take effect immediately")
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Changes take effect immediately")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+
+                    if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
+                        Text("FFWF v\(version)")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.secondary.opacity(0.7))
+                    }
+                }
 
                 Spacer()
 
@@ -89,7 +150,7 @@ struct SettingsView: View {
             }
         }
         .padding(20)
-        .frame(width: 500, height: 250)
+        .frame(width: 500, height: 350)
     }
 }
 

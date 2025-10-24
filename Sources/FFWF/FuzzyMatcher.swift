@@ -33,7 +33,11 @@ struct FuzzyMatcher {
             matches = windows.concurrentCompactMap { window in
                 let titleScore = matchPreLowered(query: query, againstLower: window.titleLower, original: window.title) ?? 0
                 let ownerScore = matchPreLowered(query: query, againstLower: window.ownerNameLower, original: window.ownerName) ?? 0
-                let bestScore = max(titleScore, ownerScore)
+
+                // Prefer title matches over app name matches (1.5x multiplier)
+                let weightedTitleScore = Int(Double(titleScore) * 1.5)
+                let bestScore = max(weightedTitleScore, ownerScore)
+
                 guard bestScore > 0 else { return nil }
                 return ScoredWindow(window: window, score: bestScore)
             }
@@ -42,7 +46,11 @@ struct FuzzyMatcher {
             matches = windows.compactMap { window in
                 let titleScore = matchPreLowered(query: query, againstLower: window.titleLower, original: window.title) ?? 0
                 let ownerScore = matchPreLowered(query: query, againstLower: window.ownerNameLower, original: window.ownerName) ?? 0
-                let bestScore = max(titleScore, ownerScore)
+
+                // Prefer title matches over app name matches (1.5x multiplier)
+                let weightedTitleScore = Int(Double(titleScore) * 1.5)
+                let bestScore = max(weightedTitleScore, ownerScore)
+
                 guard bestScore > 0 else { return nil }
                 return ScoredWindow(window: window, score: bestScore)
             }
@@ -92,13 +100,21 @@ struct FuzzyMatcher {
         var queryIndex = queryLower.startIndex
         var textIndex = textLower.startIndex
         var lastMatchIndex: String.Index? = nil
+        var firstMatchPosition: Int? = nil
         var consecutiveMatches = 0
+        var totalGapDistance = 0
+        var currentPosition = 0
 
         while queryIndex < queryLower.endIndex && textIndex < textLower.endIndex {
             let queryChar = queryLower[queryIndex]
             let textChar = textLower[textIndex]
 
             if queryChar == textChar {
+                // Track first match position for early bonus
+                if firstMatchPosition == nil {
+                    firstMatchPosition = currentPosition
+                }
+
                 // Base score for match
                 score += 1
 
@@ -108,6 +124,12 @@ struct FuzzyMatcher {
                     score += consecutiveMatches * 5
                 } else {
                     consecutiveMatches = 0
+
+                    // Calculate gap distance between non-consecutive matches
+                    if let lastIndex = lastMatchIndex {
+                        let gap = textLower.distance(from: lastIndex, to: textIndex) - 1
+                        totalGapDistance += gap
+                    }
                 }
 
                 // Bonus for match at word boundary
@@ -127,10 +149,26 @@ struct FuzzyMatcher {
             }
 
             textIndex = textLower.index(after: textIndex)
+            currentPosition += 1
         }
 
         // Must match all query characters
         guard queryIndex == queryLower.endIndex else { return nil }
+
+        // Early position bonus - matches in first 25% of string get bonus
+        if let firstPos = firstMatchPosition {
+            let textLength = textLower.count
+            let earlyThreshold = max(1, textLength / 4)
+            if firstPos < earlyThreshold {
+                let earlyBonus = 20 - (firstPos * 20 / earlyThreshold) // Up to 20 points
+                score += earlyBonus
+            }
+        }
+
+        // Character distance penalty - penalize large gaps between matches
+        // Each character gap costs 1 point, but capped to avoid over-penalizing
+        let gapPenalty = min(totalGapDistance / 2, 30) // Max penalty of 30 points
+        score -= gapPenalty
 
         // Small penalty for length (prefer shorter matches but don't over-penalize)
         let lengthDiff = text.count - term.count
@@ -138,6 +176,7 @@ struct FuzzyMatcher {
             score -= min(lengthDiff / 10, 10) // Max penalty of 10 points
         }
 
-        return score
+        // Ensure valid matches always have positive score
+        return max(score, 1)
     }
 }

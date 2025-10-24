@@ -1,6 +1,9 @@
-.PHONY: help run build build-release build-debug clean install uninstall test app app-signed
+.PHONY: help run build build-release build-debug clean install uninstall test app app-signed version
 
 .DEFAULT_GOAL := help
+
+# Version information
+VERSION := 1.0.0
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -26,16 +29,34 @@ clean: ## Clean build artifacts
 test: ## Run tests (if any)
 	swift test
 
-install: app ## Install FFWF.app to /Applications
-	@echo "Installing FFWF.app to /Applications..."
+install: clean app ## Install FFWF.app to /Applications (forces rebuild)
+	@echo "Installing FFWF v$(VERSION) to /Applications..."
+	@# Kill any running instances
+	@pkill -x FFWF 2>/dev/null || true
+	@sleep 0.5
+	@# Remove old version
 	@rm -rf /Applications/FFWF.app
+	@# Copy new version
 	@cp -r FFWF.app /Applications/
-	@echo "Installed! Launch from /Applications/FFWF.app or Spotlight."
+	@# Verify installation
+	@if [ -d /Applications/FFWF.app ]; then \
+		echo "✓ Successfully installed FFWF v$(VERSION) to /Applications/"; \
+		echo "  Launch from Spotlight (⌘Space → 'FFWF') or /Applications/FFWF.app"; \
+	else \
+		echo "✗ Installation failed!"; \
+		exit 1; \
+	fi
 
 uninstall: ## Remove FFWF.app from /Applications
-	@echo "Removing FFWF.app from /Applications..."
+	@echo "Removing FFWF from /Applications..."
+	@# Kill any running instances
+	@pkill -x FFWF 2>/dev/null || true
+	@sleep 0.5
 	@rm -rf /Applications/FFWF.app
-	@echo "Uninstalled."
+	@echo "✓ Uninstalled successfully."
+
+version: ## Show version information
+	@echo "FFWF version $(VERSION)"
 
 package-info: ## Show package information
 	swift package describe
@@ -66,9 +87,9 @@ app: build-release ## Build macOS app bundle (FFWF.app)
 	@echo '    <key>CFBundleName</key>' >> FFWF.app/Contents/Info.plist
 	@echo '    <string>FFWF</string>' >> FFWF.app/Contents/Info.plist
 	@echo '    <key>CFBundleVersion</key>' >> FFWF.app/Contents/Info.plist
-	@echo '    <string>1.0.0</string>' >> FFWF.app/Contents/Info.plist
+	@echo '    <string>$(VERSION)</string>' >> FFWF.app/Contents/Info.plist
 	@echo '    <key>CFBundleShortVersionString</key>' >> FFWF.app/Contents/Info.plist
-	@echo '    <string>1.0.0</string>' >> FFWF.app/Contents/Info.plist
+	@echo '    <string>$(VERSION)</string>' >> FFWF.app/Contents/Info.plist
 	@echo '    <key>CFBundlePackageType</key>' >> FFWF.app/Contents/Info.plist
 	@echo '    <string>APPL</string>' >> FFWF.app/Contents/Info.plist
 	@echo '    <key>LSMinimumSystemVersion</key>' >> FFWF.app/Contents/Info.plist
@@ -81,13 +102,11 @@ app: build-release ## Build macOS app bundle (FFWF.app)
 	@echo '    <string>FFWF needs accessibility access to focus and raise windows.</string>' >> FFWF.app/Contents/Info.plist
 	@echo '</dict>' >> FFWF.app/Contents/Info.plist
 	@echo '</plist>' >> FFWF.app/Contents/Info.plist
-	@echo "FFWF.app created successfully!"
-	@echo "To install: cp -r FFWF.app /Applications/"
-	@echo "To run: open FFWF.app"
+	@# Code sign with entitlements
+	@codesign --force --deep --sign - --entitlements FFWF.entitlements FFWF.app
+	@echo "✓ FFWF.app created and signed successfully!"
+	@echo "  To install: make install"
+	@echo "  To run: open FFWF.app"
 
-app-signed: app ## Build and code sign app bundle
-	@echo "Code signing FFWF.app..."
-	@codesign --force --deep --sign - FFWF.app
-	@echo "FFWF.app signed successfully!"
-	@echo "To install: cp -r FFWF.app /Applications/"
-	@echo "To run: open FFWF.app"
+app-signed: app ## Alias for 'app' (signing is now done automatically)
+	@echo "Note: 'make app' now includes code signing with entitlements"

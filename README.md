@@ -215,6 +215,10 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Credits
 
-Built with Swift and SwiftUI by [robertmeta](https://github.com/robertmeta).
+An Intelligrit Open Source Product
+https://intelligrit.com/open-source/
 
+Built with Swift and SwiftUI.
 Fuzzy matching algorithm inspired by Sublime Text's Goto Anything feature.
+
+© 2025 Intelligrit

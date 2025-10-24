@@ -53,6 +53,8 @@ class WindowManager: ObservableObject {
         isRefreshing = true
         refreshLock.unlock()
 
+        print("🔄 WindowManager: Starting window refresh...")
+
         // Run window enumeration on background thread for speed
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
@@ -63,6 +65,8 @@ class WindowManager: ObservableObject {
                 // Skip background processes and daemons that never have user windows
                 app.activationPolicy == .regular || app.activationPolicy == .accessory
             }
+
+            print("  Found \(runningApps.count) running apps to enumerate")
 
             // Process apps in parallel for speed
             let queue = DispatchQueue(label: "window-enumeration", attributes: .concurrent)
@@ -138,9 +142,12 @@ class WindowManager: ObservableObject {
                 )
             }
 
+            print("  ✓ Found \(newWindows.count) total windows")
+
             // Update on main thread
             DispatchQueue.main.async {
                 self.windows = newWindows
+                print("  ✓ Published \(newWindows.count) windows to UI")
 
                 // Clear refresh lock
                 self.refreshLock.lock()

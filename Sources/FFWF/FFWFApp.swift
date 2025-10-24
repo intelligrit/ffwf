@@ -44,6 +44,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Create menu for right-click (but don't assign it yet)
         menu = NSMenu()
+        menu?.addItem(NSMenuItem(title: "About FFWF", action: #selector(showAbout), keyEquivalent: ""))
+        menu?.addItem(NSMenuItem.separator())
         menu?.addItem(NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: ","))
         menu?.addItem(NSMenuItem.separator())
         menu?.addItem(NSMenuItem(title: "Quit FFWF", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
@@ -59,8 +61,64 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Don't show in Dock
         NSApp.setActivationPolicy(.accessory)
 
+        // Check for required permissions
+        checkAccessibilityPermission()
+
         // Start loading windows immediately at startup
         WindowManager.shared.refreshWindows()
+    }
+
+    func checkAccessibilityPermission() {
+        // Check if we have accessibility permission
+        let trusted = AXIsProcessTrusted()
+
+        if !trusted {
+            // Show alert after a short delay to ensure the app is fully loaded
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                let alert = NSAlert()
+                alert.messageText = "Accessibility Permission Required"
+                alert.informativeText = """
+                FFWF needs Accessibility permission to function properly.
+
+                Without this permission, FFWF cannot:
+                • Read the list of open windows
+                • Switch between windows
+                • Display window titles
+
+                Please grant Accessibility permission in System Settings.
+                """
+                alert.alertStyle = .warning
+                alert.addButton(withTitle: "Open System Settings")
+                alert.addButton(withTitle: "Quit")
+
+                let response = alert.runModal()
+
+                if response == .alertFirstButtonReturn {
+                    // Open System Settings to Accessibility
+                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+
+                    // Show follow-up instructions
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                        let followUp = NSAlert()
+                        followUp.messageText = "Enable FFWF in Accessibility"
+                        followUp.informativeText = """
+                        1. Click the lock icon and enter your password
+                        2. Find "FFWF" in the list
+                        3. Toggle the switch ON
+                        4. Quit and relaunch FFWF
+
+                        FFWF will continue running in the background, but won't work until you grant permission and restart.
+                        """
+                        followUp.alertStyle = .informational
+                        followUp.addButton(withTitle: "OK")
+                        followUp.runModal()
+                    }
+                } else {
+                    // User chose to quit
+                    NSApp.terminate(nil)
+                }
+            }
+        }
     }
 
     @objc func handleStatusItemClick(_ sender: Any?) {
@@ -173,6 +231,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         settingsWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc func showAbout() {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
+        let alert = NSAlert()
+        alert.messageText = "FFWF - Fast Fuzzy Window Finder"
+        alert.informativeText = """
+        Version \(version)
+
+        A blazing-fast macOS menu bar app for switching windows with fuzzy search.
+
+        An Intelligrit Open Source Product
+        https://intelligrit.com/open-source/
+
+        © 2025 Intelligrit
+        """
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

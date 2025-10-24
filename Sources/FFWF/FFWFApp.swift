@@ -16,6 +16,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
     var popover: NSPopover?
     var settingsWindow: NSWindow?
+    var aboutWindow: NSWindow?
     var eventMonitor: Any?
     var hotkeyRef: EventHotKeyRef?
     var hotkeyEventHandler: EventHandlerRef?
@@ -234,30 +235,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func showAbout() {
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
-        let alert = NSAlert()
-        alert.messageText = "FFWF - Fast Fuzzy Window Finder"
-        alert.informativeText = """
-        Version \(version)
+        // Create or show about window
+        if aboutWindow == nil {
+            let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
+            let aboutView = AboutView(version: version)
+            let hostingController = NSHostingController(rootView: aboutView)
 
-        A blazing-fast macOS menu bar app for switching windows with fuzzy search.
+            let window = NSWindow(contentViewController: hostingController)
+            window.title = "About FFWF"
+            window.styleMask = [.titled, .closable]
+            window.center()
+            window.setFrameAutosaveName("AboutWindow")
 
-        An Intelligrit Labs Product
-
-        © 2025 Intelligrit, LLC
-        """
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "Visit Intelligrit Labs")
-        alert.addButton(withTitle: "OK")
-
-        let response = alert.runModal()
-
-        if response == .alertFirstButtonReturn {
-            // Open Intelligrit Labs website
-            if let url = URL(string: "https://intelligrit.com/labs/") {
-                NSWorkspace.shared.open(url)
-            }
+            aboutWindow = window
         }
+
+        aboutWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

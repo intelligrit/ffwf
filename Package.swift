@@ -12,7 +12,8 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "FFWF",
-            path: "Sources"
+            path: "Sources",
+            exclude: ["FFWF/Info.plist"]
         )
     ]
 )

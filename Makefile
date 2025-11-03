@@ -1,4 +1,4 @@
-.PHONY: help run build build-release build-debug clean install uninstall test app app-signed version reset-permissions sign
+.PHONY: help run build build-release build-debug clean install uninstall test app app-signed version reset-permissions sign dmg
 
 .DEFAULT_GOAL := help
 
@@ -141,3 +141,6 @@ app: build-release ## Build macOS app bundle (FFWF.app)
 
 app-signed: app ## Alias for 'app' (signing is now done automatically)
 	@echo "Note: 'make app' now includes code signing with entitlements"
+
+dmg: app ## Create DMG installer package
+	@./create-dmg.sh $(VERSION)

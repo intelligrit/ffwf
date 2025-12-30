@@ -1,5 +1,9 @@
 # FFWF - Fast Fuzzy Window Finder
 
+<p align="center">
+  <img src="logo.png" alt="FFWF logo" width="200">
+</p>
+
 A blazing-fast macOS menu bar app for switching windows with fuzzy search. Built with Swift and SwiftUI for maximum performance.
 
 ![macOS](https://img.shields.io/badge/macOS-14.0+-blue.svg)

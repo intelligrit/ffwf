@@ -30,7 +30,20 @@ See [QUICKSTART.md](QUICKSTART.md) for end-user installation and usage instructi
 
 ## Installation
 
-### Option 1: Install from Source (Recommended)
+### Option 1: Homebrew (Recommended)
+
+```bash
+# Add the tap
+brew tap robertmeta/ffwf
+
+# Install FFWF
+brew install --cask ffwf
+
+# Launch from Spotlight or Applications folder
+open /Applications/FFWF.app
+```
+
+### Option 2: Install from Source
 
 ```bash
 # Clone the repository
@@ -44,7 +57,7 @@ make install
 open /Applications/FFWF.app
 ```
 
-### Option 2: Manual Build
+### Option 3: Manual Build
 
 ```bash
 # Build release version
@@ -56,6 +69,13 @@ cp -r FFWF.app /Applications/
 
 ### Uninstall
 
+**Homebrew:**
+```bash
+brew uninstall --cask ffwf
+brew untap robertmeta/ffwf
+```
+
+**From source:**
 ```bash
 make uninstall
 ```

@@ -1,4 +1,4 @@
-.PHONY: help run build build-release build-debug clean install uninstall test app app-signed version reset-permissions sign dmg
+.PHONY: help run build build-release build-debug clean install uninstall test app app-signed version reset-permissions sign dmg update-brew
 
 .DEFAULT_GOAL := help
 
@@ -144,3 +144,49 @@ app-signed: app ## Alias for 'app' (signing is now done automatically)
 
 dmg: app ## Create DMG installer package
 	@./create-dmg.sh $(VERSION)
+
+update-brew: ## Update Homebrew cask formula in ../homebrew-ffwf
+	@echo "Updating Homebrew cask for FFWF v$(VERSION)..."
+	@# Download DMG from GitHub release
+	@echo "Downloading DMG from GitHub..."
+	@curl -L -o /tmp/FFWF-$(VERSION).dmg \
+		https://github.com/intelligrit/ffwf/releases/download/v$(VERSION)/FFWF-$(VERSION).dmg
+	@# Calculate SHA256
+	@echo "Calculating SHA256..."
+	@SHA256=$$(shasum -a 256 /tmp/FFWF-$(VERSION).dmg | awk '{print $$1}'); \
+	echo "SHA256: $$SHA256"; \
+	# Update Cask formula
+	echo "Updating Cask formula..."; \
+	cat > ../homebrew-ffwf/Casks/ffwf.rb <<EOF
+cask "ffwf" do
+  version "$(VERSION)"
+  sha256 "$$SHA256"
+
+  url "https://github.com/intelligrit/ffwf/releases/download/v#{version}/FFWF-#{version}.dmg"
+  name "FFWF"
+  desc "Fast Fuzzy Window Finder - macOS menu bar app for switching windows"
+  homepage "https://intelligrit.com/labs/"
+
+  livecheck do
+    url :url
+    strategy :github_latest
+  end
+
+  app "FFWF.app"
+
+  zap trash: [
+    "~/Library/Preferences/com.robertmeta.FFWF.plist",
+  ]
+end
+EOF
+	@# Clean up
+	@rm -f /tmp/FFWF-$(VERSION).dmg
+	@echo "✓ Homebrew cask updated successfully!"
+	@echo "  Formula: ../homebrew-ffwf/Casks/ffwf.rb"
+	@echo "  Version: $(VERSION)"
+	@echo ""
+	@echo "Next steps:"
+	@echo "  cd ../homebrew-ffwf"
+	@echo "  git add Casks/ffwf.rb"
+	@echo "  git commit -m 'Update FFWF to v$(VERSION)'"
+	@echo "  git push"

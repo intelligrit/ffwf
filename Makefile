@@ -157,28 +157,28 @@ update-brew: ## Update Homebrew cask formula in ../homebrew-ffwf
 	echo "SHA256: $$SHA256"; \
 	# Update Cask formula
 	echo "Updating Cask formula..."; \
-	cat > ../homebrew-ffwf/Casks/ffwf.rb <<EOF
-cask "ffwf" do
-  version "$(VERSION)"
-  sha256 "$$SHA256"
+	cat > ../homebrew-ffwf/Casks/ffwf.rb <<-EOF
+	cask "ffwf" do
+	  version "$(VERSION)"
+	  sha256 "$$SHA256"
 
-  url "https://github.com/intelligrit/ffwf/releases/download/v#{version}/FFWF-#{version}.dmg"
-  name "FFWF"
-  desc "Fast Fuzzy Window Finder - macOS menu bar app for switching windows"
-  homepage "https://intelligrit.com/labs/"
+	  url "https://github.com/intelligrit/ffwf/releases/download/v#{version}/FFWF-#{version}.dmg"
+	  name "FFWF"
+	  desc "Fast Fuzzy Window Finder - macOS menu bar app for switching windows"
+	  homepage "https://intelligrit.com/labs/"
 
-  livecheck do
-    url :url
-    strategy :github_latest
-  end
+	  livecheck do
+	    url :url
+	    strategy :github_latest
+	  end
 
-  app "FFWF.app"
+	  app "FFWF.app"
 
-  zap trash: [
-    "~/Library/Preferences/com.robertmeta.FFWF.plist",
-  ]
-end
-EOF
+	  zap trash: [
+	    "~/Library/Preferences/com.robertmeta.FFWF.plist",
+	  ]
+	end
+	EOF
 	@# Clean up
 	@rm -f /tmp/FFWF-$(VERSION).dmg
 	@echo "✓ Homebrew cask updated successfully!"

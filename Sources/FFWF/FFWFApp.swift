@@ -3,6 +3,8 @@ import Carbon
 
 @main
 struct FFWFApp: App {
+    static let version = "1.1.1"
+
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
@@ -237,8 +239,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func showAbout() {
         // Create or show about window
         if aboutWindow == nil {
-            let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
-            let aboutView = AboutView(version: version)
+            let aboutView = AboutView(version: FFWFApp.version)
             let hostingController = NSHostingController(rootView: aboutView)
 
             let window = NSWindow(contentViewController: hostingController)

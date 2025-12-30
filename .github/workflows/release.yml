@@ -1,0 +1,105 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Makefile'
+      - 'Sources/**'
+      - 'Package.swift'
+      - '.github/workflows/release.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: latest-stable
+
+    - name: Extract version from source code
+      id: version
+      run: |
+        VERSION=$(grep 'static let version' Sources/FFWF/FFWFApp.swift | awk -F'"' '{print $2}')
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Building version: $VERSION"
+
+    - name: Build release binary
+      run: swift build -c release
+
+    - name: Create app bundle
+      run: make app
+
+    - name: Create DMG
+      run: make dmg
+
+    - name: Check for existing release
+      id: check_release
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        if gh release view "v$VERSION" >/dev/null 2>&1; then
+          echo "exists=true" >> $GITHUB_OUTPUT
+          echo "Release v$VERSION already exists"
+        else
+          echo "exists=false" >> $GITHUB_OUTPUT
+          echo "Release v$VERSION does not exist"
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Create GitHub Release
+      if: steps.check_release.outputs.exists == 'false'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        gh release create "v$VERSION" \
+          "FFWF-$VERSION.dmg" \
+          --title "FFWF v$VERSION" \
+          --notes "Release of FFWF version $VERSION
+
+          ## Installation
+          1. Download the DMG file
+          2. Open the DMG
+          3. Drag FFWF.app to Applications
+          4. Launch FFWF from Applications
+          5. Grant Accessibility permissions when prompted
+
+          ## Changes
+          See commit history for details."
+
+    - name: Update existing release
+      if: steps.check_release.outputs.exists == 'true'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        echo "Release v$VERSION already exists, updating assets..."
+        gh release upload "v$VERSION" "FFWF-$VERSION.dmg" --clobber
+
+    - name: Upload to GitHub Pages (if docs/ exists)
+      if: hashFiles('docs/') != ''
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        if [ -d "docs" ]; then
+          cp "FFWF-$VERSION.dmg" docs/
+          echo "DMG copied to docs/ directory"
+        fi
+
+    - name: Commit docs changes
+      if: hashFiles('docs/') != ''
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add docs/ || true
+        git diff --staged --quiet || git commit -m "Update DMG for v${{ steps.version.outputs.version }}"
+        git push || true

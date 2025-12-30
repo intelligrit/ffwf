@@ -2,8 +2,8 @@
 
 .DEFAULT_GOAL := help
 
-# Version information
-VERSION := 1.1.2
+# Version information - extracted from source code
+VERSION := $(shell grep 'static let version' Sources/FFWF/FFWFApp.swift | awk -F'"' '{print $$2}')
 
 # Code signing identity (set to your Developer ID or leave as "-" for ad-hoc)
 # Example: SIGNING_IDENTITY := "Developer ID Application: Your Name (TEAM_ID)"

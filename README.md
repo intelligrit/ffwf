@@ -1,5 +1,7 @@
 # FFWF - Fast Fuzzy Window Finder
 
+**An [Intelligrit Labs](https://intelligrit.com#labs) Project**
+
 <p align="center">
   <img src="logo.png" alt="FFWF logo" width="200">
 </p>
@@ -38,7 +40,7 @@ See [QUICKSTART.md](QUICKSTART.md) for end-user installation and usage instructi
 
 ```bash
 # Add the tap
-brew tap robertmeta/ffwf
+brew tap intelligrit/ffwf
 
 # Install FFWF
 brew install --cask ffwf
@@ -51,8 +53,8 @@ open /Applications/FFWF.app
 
 ```bash
 # Clone the repository
-git clone https://github.com/robertmeta/FFWF.git
-cd FFWF
+git clone https://github.com/intelligrit/ffwf.git
+cd ffwf
 
 # Build and install to /Applications
 make install
@@ -76,7 +78,7 @@ cp -r FFWF.app /Applications/
 **Homebrew:**
 ```bash
 brew uninstall --cask ffwf
-brew untap robertmeta/ffwf
+brew untap intelligrit/ffwf
 ```
 
 **From source:**
@@ -237,12 +239,10 @@ Contributions welcome! Please:
 
 MIT License - see [LICENSE](LICENSE) file for details.
 
-## Credits
+## About Intelligrit Labs
 
-An Intelligrit Labs Product
-https://intelligrit.com/labs/
+FFWF is developed by [Intelligrit Labs](https://intelligrit.com#labs), the R&D arm of Intelligrit LLC. We build tools for ourselves and release them for everyone. Intelligrit delivers AI-driven IT modernization for federal agencies.
 
-Built with Swift and SwiftUI.
-Fuzzy matching algorithm inspired by Sublime Text's Goto Anything feature.
+Built with Swift and SwiftUI. Fuzzy matching algorithm inspired by Sublime Text's Goto Anything feature.
 
 © 2025 Intelligrit, LLC

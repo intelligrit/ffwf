@@ -14,9 +14,15 @@ struct FFWFApp: App {
     }
 }
 
+// Custom window that can become key even when borderless
+class KeyableWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+}
+
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
-    var popover: NSPopover?
+    var searchWindow: NSWindow?
     var settingsWindow: NSWindow?
     var aboutWindow: NSWindow?
     var eventMonitor: Any?
@@ -53,10 +59,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu?.addItem(NSMenuItem.separator())
         menu?.addItem(NSMenuItem(title: "Quit FFWF", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
 
-        // Create popover
-        popover = NSPopover()
-        popover?.contentViewController = NSHostingController(rootView: ContentView(hideWindow: hidePopover))
-        popover?.behavior = .transient
+        // Create search window
+        createSearchWindow()
 
         // Register global hotkey (Cmd+Shift+Space)
         registerGlobalHotkey()
@@ -140,26 +144,68 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         togglePopover()
     }
 
+    func createSearchWindow() {
+        let contentView = ContentView(hideWindow: hideSearchWindow)
+        let hostingController = NSHostingController(rootView: contentView)
+
+        let window = KeyableWindow(contentViewController: hostingController)
+        window.styleMask = [.borderless]
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.level = .floating
+        window.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
+        window.setContentSize(NSSize(width: 600, height: 400))
+        window.isMovableByWindowBackground = false
+
+        searchWindow = window
+    }
+
     func togglePopover() {
-        if let popover = popover {
-            if popover.isShown {
-                hidePopover()
+        if let window = searchWindow {
+            if window.isVisible {
+                hideSearchWindow()
             } else {
-                showPopover()
+                showSearchWindow()
             }
         }
     }
 
-    func showPopover() {
-        if let button = statusItem?.button, let popover = popover {
-            // Position below menu bar icon
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            popover.contentViewController?.view.window?.makeKey()
+    func showSearchWindow() {
+        if let window = searchWindow {
+            // Center window on the screen with the mouse
+            if let screen = NSScreen.main {
+                let screenFrame = screen.visibleFrame
+                let windowSize = window.frame.size
+                let x = screenFrame.midX - (windowSize.width / 2)
+                let y = screenFrame.midY - (windowSize.height / 2)
+                window.setFrameOrigin(NSPoint(x: x, y: y))
+            }
+
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+
+            // Start monitoring for clicks outside the window
+            startEventMonitor()
         }
     }
 
-    func hidePopover() {
-        popover?.performClose(nil)
+    func hideSearchWindow() {
+        searchWindow?.orderOut(nil)
+        stopEventMonitor()
+    }
+
+    func startEventMonitor() {
+        // Monitor for clicks outside the window
+        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+            self?.hideSearchWindow()
+        }
+    }
+
+    func stopEventMonitor() {
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+            eventMonitor = nil
+        }
     }
 
     func registerGlobalHotkey() {

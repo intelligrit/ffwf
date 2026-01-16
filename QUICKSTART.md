@@ -8,7 +8,7 @@ Get up and running with FFWF (Fast Fuzzy Window Finder) in under 2 minutes.
 
 ```bash
 # Clone the repository
-git clone https://github.com/robertmeta/FFWF.git
+git clone https://github.com/intelligrit/FFWF.git
 cd FFWF
 
 # Install to /Applications
@@ -82,7 +82,7 @@ make uninstall
 ## Getting Help
 
 - Full documentation: [README.md](README.md)
-- Report bugs: [GitHub Issues](https://github.com/robertmeta/FFWF/issues)
+- Report bugs: [GitHub Issues](https://github.com/intelligrit/FFWF/issues)
 
 ## Keyboard Reference
 

@@ -13,36 +13,58 @@ struct ContentView: View {
     @State private var historyNavigationIndex: Int? = nil
     @FocusState private var isSearchFocused: Bool
 
-    private var allFilteredWindows: [ScoredWindow] {
+    private var allFilteredItems: [ScoredWindow] {
         FuzzyMatcher.filterWindows(windowManager.windows, query: searchQuery)
     }
 
-    private var filteredWindows: [ScoredWindow] {
-        Array(allFilteredWindows.prefix(resultLimit))
+    private var filteredItems: [ScoredWindow] {
+        Array(allFilteredItems.prefix(resultLimit))
     }
 
     private var hasMoreResults: Bool {
-        allFilteredWindows.count > resultLimit
+        allFilteredItems.count > resultLimit
     }
 
     private var resultCountAnnouncement: String {
-        let count = filteredWindows.count
+        let count = filteredItems.count
         if count == 0 {
-            return "No windows found"
+            return "No results found"
         } else if count == 1 {
-            return "1 window found"
+            return "1 result found"
         } else {
-            return "\(count) windows found"
+            return "\(count) results found"
         }
     }
 
-    private func announceSelectedWindow() {
-        guard !filteredWindows.isEmpty, selectedIndex < filteredWindows.count else { return }
+    private var selectedAnnouncementToken: String {
+        guard historyNavigationIndex == nil,
+              !filteredItems.isEmpty,
+              selectedIndex < filteredItems.count else {
+            return ""
+        }
 
-        let window = filteredWindows[selectedIndex].window
-        let title = window.title.isEmpty ? window.ownerName : window.title
-        let app = window.title.isEmpty ? "" : ", \(window.ownerName)"
-        let announcement = "\(title)\(app)"
+        let item = filteredItems[selectedIndex].window
+        return "\(selectedIndex)|\(item.id)|\(item.title)|\(item.ownerName)"
+    }
+
+    private func announceSelectedItem() {
+        guard !filteredItems.isEmpty, selectedIndex < filteredItems.count else { return }
+
+        let item = filteredItems[selectedIndex].window
+        let title = item.title.isEmpty ? item.ownerName : item.title
+        let announcement: String
+        if item.isTerminalTab {
+            let tabPrefix: String
+            if let tabIndex = item.terminalTabIndex {
+                tabPrefix = "tab \(tabIndex)"
+            } else {
+                tabPrefix = "tab"
+            }
+            announcement = "\(tabPrefix) \(title), \(item.ownerName)"
+        } else {
+            let app = item.title.isEmpty ? "" : ", \(item.ownerName)"
+            announcement = "\(title)\(app)"
+        }
 
         // Post announcement directly to the application
         DispatchQueue.main.async {
@@ -56,17 +78,26 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Search field
-            TextField("Search windows...", text: $searchQuery)
+            TextField("Search windows and tabs...", text: $searchQuery)
                 .textFieldStyle(.plain)
                 .font(.system(size: 18))
                 .padding(12)
                 .background(Color(NSColor.controlBackgroundColor))
                 .focused($isSearchFocused)
-                .accessibilityLabel("Search for windows")
-                .accessibilityHint("Type to filter windows by title or application name")
+                .accessibilityLabel("Search for windows and tabs")
+                .accessibilityHint("Type to filter windows, tabs, and application names")
                 .accessibilityValue(searchQuery.isEmpty ? "Empty" : searchQuery)
                 .onSubmit {
-                    selectWindow()
+                    // If in history mode, select the highlighted history item
+                    if searchQuery.isEmpty, let index = historyNavigationIndex {
+                        let recentSearches = searchHistory.recentSearches()
+                        if index < recentSearches.count {
+                            searchQuery = recentSearches[index]
+                            historyNavigationIndex = nil
+                        }
+                    } else {
+                        selectWindow()
+                    }
                 }
 
             Divider()
@@ -96,7 +127,11 @@ struct ContentView: View {
                                             .font(.system(size: 14))
                                     }
                                     .padding(.vertical, 4)
+                                    .padding(.horizontal, 8)
+                                    .background(historyNavigationIndex == index ? Color.accentColor.opacity(0.3) : Color.clear)
+                                    .cornerRadius(4)
                                     .contentShape(Rectangle())
+                                    .id("history-\(index)")
                                     .onTapGesture {
                                         searchQuery = historyItem
                                     }
@@ -106,12 +141,12 @@ struct ContentView: View {
 
                         // Windows section
                         if !searchQuery.isEmpty || searchHistory.recentSearches().isEmpty {
-                            ForEach(Array(filteredWindows.enumerated()), id: \.element.id) { index, scoredWindow in
+                            ForEach(Array(filteredItems.enumerated()), id: \.element.id) { index, scoredWindow in
                                 WindowRow(
                                     window: scoredWindow.window,
                                     isSelected: index == selectedIndex,
                                     index: index + 1,
-                                    total: allFilteredWindows.count
+                                    total: allFilteredItems.count
                                 )
                                 .id(index)
                                 .contentShape(Rectangle())
@@ -128,7 +163,7 @@ struct ContentView: View {
                                 }) {
                                     HStack {
                                         Spacer()
-                                        Text("Show more (\(allFilteredWindows.count - resultLimit) remaining)")
+                                        Text("Show more (\(allFilteredItems.count - resultLimit) remaining)")
                                             .font(.system(size: 12))
                                             .foregroundColor(.secondary)
                                         Spacer()
@@ -142,20 +177,28 @@ struct ContentView: View {
                     }
                     .listStyle(.plain)
                     .accessibilityElement(children: .contain)
-                    .accessibilityLabel("Window list")
-                    .accessibilityHint("Use arrow keys to navigate, Enter to switch to window, Escape to close")
+                    .accessibilityLabel("Result list")
+                    .accessibilityHint("Use arrow keys to navigate, Enter to switch to the selected result, Escape to close")
                     .onChange(of: selectedIndex) { _, newValue in
                         withAnimation(.easeOut(duration: 0.1)) {
                             proxy.scrollTo(newValue, anchor: .center)
                         }
                     }
+                    .onChange(of: historyNavigationIndex) { _, newValue in
+                        if let index = newValue {
+                            withAnimation(.easeOut(duration: 0.1)) {
+                                proxy.scrollTo("history-\(index)", anchor: .center)
+                            }
+                        }
+                    }
+                    .onChange(of: selectedAnnouncementToken) { oldValue, newValue in
+                        guard !newValue.isEmpty, oldValue != newValue else { return }
+                        announceSelectedItem()
+                    }
                     .onChange(of: searchQuery) { _, _ in
                         selectedIndex = 0
                         resultLimit = 10 // Reset limit on new search
                         historyNavigationIndex = nil
-
-                        // Announce selected window immediately - speed is key
-                        announceSelectedWindow()
                     }
                 }
             }
@@ -199,41 +242,40 @@ struct ContentView: View {
         .onKeyPress(.upArrow) {
             // Navigate history when search is empty
             if searchQuery.isEmpty && !searchHistory.recentSearches().isEmpty {
-                let recentSearches = searchHistory.recentSearches()
                 if let currentIndex = historyNavigationIndex {
-                    historyNavigationIndex = min(currentIndex + 1, recentSearches.count - 1)
+                    // Move up in the list (decrement index, but don't go below 0)
+                    if currentIndex > 0 {
+                        historyNavigationIndex = currentIndex - 1
+                    }
                 } else {
+                    // Start at the first item
                     historyNavigationIndex = 0
                 }
-                if let index = historyNavigationIndex {
-                    searchQuery = recentSearches[index]
-                }
-            } else if !filteredWindows.isEmpty {
-                // Navigate windows
+            } else if !filteredItems.isEmpty {
+                // Navigate results
                 if selectedIndex > 0 {
                     selectedIndex -= 1
-                    announceSelectedWindow()
                 }
             }
             return .handled
         }
         .onKeyPress(.downArrow) {
-            // Navigate history when search is empty and we're in history mode
-            if historyNavigationIndex != nil {
+            // Navigate history when search is empty
+            if searchQuery.isEmpty && !searchHistory.recentSearches().isEmpty {
                 let recentSearches = searchHistory.recentSearches()
-                if let currentIndex = historyNavigationIndex, currentIndex > 0 {
-                    historyNavigationIndex = currentIndex - 1
-                    searchQuery = recentSearches[currentIndex - 1]
+                if let currentIndex = historyNavigationIndex {
+                    // Move down in the list (increment index)
+                    if currentIndex < recentSearches.count - 1 {
+                        historyNavigationIndex = currentIndex + 1
+                    }
                 } else {
-                    // Back to empty
-                    historyNavigationIndex = nil
-                    searchQuery = ""
+                    // Start at the first item
+                    historyNavigationIndex = 0
                 }
-            } else if !searchQuery.isEmpty && !filteredWindows.isEmpty {
-                // Navigate windows
-                if selectedIndex < filteredWindows.count - 1 {
+            } else if !searchQuery.isEmpty && !filteredItems.isEmpty {
+                // Navigate results
+                if selectedIndex < filteredItems.count - 1 {
                     selectedIndex += 1
-                    announceSelectedWindow()
                 }
             }
             return .handled
@@ -245,8 +287,8 @@ struct ContentView: View {
     }
 
     private func selectWindow() {
-        guard !filteredWindows.isEmpty, selectedIndex < filteredWindows.count else { return }
-        let window = filteredWindows[selectedIndex].window
+        guard !filteredItems.isEmpty, selectedIndex < filteredItems.count else { return }
+        let window = filteredItems[selectedIndex].window
 
         // Save search to history if not empty
         if !searchQuery.isEmpty {
@@ -267,8 +309,19 @@ struct WindowRow: View {
     var accessibilityDescription: String {
         let title = window.title.isEmpty ? window.ownerName : window.title
         let app = window.title.isEmpty ? "" : ", \(window.ownerName)"
-        let position = "Window \(index) of \(total)"
+        let role = window.isTerminalTab ? "Tab" : "Window"
+        let position = "\(role) \(index) of \(total)"
         let state = isSelected ? ", selected" : ""
+        if window.isTerminalTab {
+            let tabPrefix: String
+            if let tabIndex = window.terminalTabIndex {
+                tabPrefix = "tab \(tabIndex)"
+            } else {
+                tabPrefix = "tab"
+            }
+            let subtitle = window.subtitle.map { ", \($0)" } ?? ""
+            return "\(tabPrefix) \(title)\(subtitle)\(app). \(position)\(state)"
+        }
         return "\(title)\(app). \(position)\(state)"
     }
 
@@ -283,11 +336,27 @@ struct WindowRow: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(window.title.isEmpty ? window.ownerName : window.title)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.primary)
+                HStack(spacing: 8) {
+                    if window.isTerminalTab {
+                        Text("TAB")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(.accentColor)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.accentColor.opacity(0.12))
+                            .clipShape(Capsule())
+                    }
 
-                if !window.title.isEmpty {
+                    Text(window.title.isEmpty ? window.ownerName : window.title)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.primary)
+                }
+
+                if let subtitle = window.subtitle {
+                    Text("\(subtitle) · \(window.ownerName)")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                } else if !window.title.isEmpty {
                     Text(window.ownerName)
                         .font(.system(size: 12))
                         .foregroundColor(.secondary)
@@ -302,7 +371,7 @@ struct WindowRow: View {
         .cornerRadius(4)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
-        .accessibilityHint("Press Enter to switch to this window")
+        .accessibilityHint(window.isTerminalTab ? "Press Enter to switch to this tab" : "Press Enter to switch to this window")
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : [.isButton])
     }
 }

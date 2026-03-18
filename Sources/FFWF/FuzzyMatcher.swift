@@ -33,10 +33,12 @@ struct FuzzyMatcher {
             matches = windows.concurrentCompactMap { window in
                 let titleScore = matchPreLowered(query: query, againstLower: window.titleLower, original: window.title) ?? 0
                 let ownerScore = matchPreLowered(query: query, againstLower: window.ownerNameLower, original: window.ownerName) ?? 0
+                let subtitleScore = matchPreLowered(query: query, againstLower: window.subtitleLower, original: window.subtitle ?? "") ?? 0
+                let detailScore = matchPreLowered(query: query, againstLower: window.detailTextLower, original: window.detailText) ?? 0
 
                 // Prefer title matches over app name matches (1.5x multiplier)
                 let weightedTitleScore = Int(Double(titleScore) * 1.5)
-                let bestScore = max(weightedTitleScore, ownerScore)
+                let bestScore = max(weightedTitleScore, ownerScore, subtitleScore, detailScore)
 
                 guard bestScore > 0 else { return nil }
                 return ScoredWindow(window: window, score: bestScore)
@@ -46,10 +48,12 @@ struct FuzzyMatcher {
             matches = windows.compactMap { window in
                 let titleScore = matchPreLowered(query: query, againstLower: window.titleLower, original: window.title) ?? 0
                 let ownerScore = matchPreLowered(query: query, againstLower: window.ownerNameLower, original: window.ownerName) ?? 0
+                let subtitleScore = matchPreLowered(query: query, againstLower: window.subtitleLower, original: window.subtitle ?? "") ?? 0
+                let detailScore = matchPreLowered(query: query, againstLower: window.detailTextLower, original: window.detailText) ?? 0
 
                 // Prefer title matches over app name matches (1.5x multiplier)
                 let weightedTitleScore = Int(Double(titleScore) * 1.5)
-                let bestScore = max(weightedTitleScore, ownerScore)
+                let bestScore = max(weightedTitleScore, ownerScore, subtitleScore, detailScore)
 
                 guard bestScore > 0 else { return nil }
                 return ScoredWindow(window: window, score: bestScore)

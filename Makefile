@@ -157,7 +157,7 @@ update-brew: ## Update Homebrew cask formula in ../homebrew-ffwf
 	echo "SHA256: $$SHA256"; \
 	# Update Cask formula
 	echo "Updating Cask formula..."; \
-	cat > ../homebrew-ffwf/Casks/ffwf.rb <<-EOF
+	cat > ../homebrew-ffwf/Casks/ffwf.rb <<EOF
 	cask "ffwf" do
 	  version "$(VERSION)"
 	  sha256 "$$SHA256"

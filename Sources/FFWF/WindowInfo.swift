@@ -8,6 +8,7 @@ enum WindowKind: Hashable {
     case slackWorkspace(name: String)
     case slackChannel(workspace: String, name: String)
     case slackDM(workspace: String, name: String)
+    case messagesChat(chatID: String, handle: String, serviceType: String)
 }
 
 struct WindowInfo: Identifiable, Hashable {
@@ -87,7 +88,7 @@ struct WindowInfo: Identifiable, Hashable {
         switch kind {
         case .terminalTab, .chromeTab:
             return true
-        case .window, .slackWorkspace, .slackChannel, .slackDM:
+        case .window, .slackWorkspace, .slackChannel, .slackDM, .messagesChat:
             return false
         }
     }
@@ -96,9 +97,16 @@ struct WindowInfo: Identifiable, Hashable {
         switch kind {
         case .slackWorkspace, .slackChannel, .slackDM:
             return true
-        case .window, .terminalTab, .chromeTab:
+        case .window, .terminalTab, .chromeTab, .messagesChat:
             return false
         }
+    }
+
+    var isMessagesItem: Bool {
+        if case .messagesChat = kind {
+            return true
+        }
+        return false
     }
 
     var slackBadgeText: String? {
@@ -109,9 +117,16 @@ struct WindowInfo: Identifiable, Hashable {
             return "CHAN"
         case .slackDM:
             return "DM"
-        case .window, .terminalTab, .chromeTab:
+        case .window, .terminalTab, .chromeTab, .messagesChat:
             return nil
         }
+    }
+
+    var messagesBadgeText: String? {
+        if case .messagesChat = kind {
+            return "MSG"
+        }
+        return nil
     }
 
     var isTerminalTab: Bool {
@@ -139,7 +154,7 @@ struct WindowInfo: Identifiable, Hashable {
         switch kind {
         case .terminalTab(_, _, let tabIndex), .chromeTab(_, _, let tabIndex):
             return tabIndex
-        case .window, .slackWorkspace, .slackChannel, .slackDM:
+        case .window, .slackWorkspace, .slackChannel, .slackDM, .messagesChat:
             return nil
         }
     }

@@ -6,6 +6,7 @@ class WindowManager: ObservableObject {
     private static let terminalBundleID = "com.apple.Terminal"
     private static let chromeBundleID = "com.google.Chrome"
     private static let slackBundleID = "com.tinyspeck.slackmacgap"
+    private static let messagesBundleID = "com.apple.MobileSMS"
     private static let maxTabSearchDepth = 4
 
     @Published var windows: [WindowInfo] = []
@@ -14,15 +15,19 @@ class WindowManager: ObservableObject {
     private let terminalTabCacheLock = NSLock()
     private let chromeTabCacheLock = NSLock()
     private let slackItemCacheLock = NSLock()
+    private let messagesChatCacheLock = NSLock()
     private var cachedTerminalTabs: [WindowInfo] = []
     private var cachedChromeTabs: [WindowInfo] = []
     private var cachedSlackItems: [WindowInfo] = []
+    private var cachedMessagesChats: [WindowInfo] = []
     private var lastTerminalTabRefresh = Date.distantPast
     private var lastChromeTabRefresh = Date.distantPast
     private var lastSlackItemRefresh = Date.distantPast
+    private var lastMessagesChatRefresh = Date.distantPast
     private let terminalTabRefreshInterval: TimeInterval = 1.5
     private let chromeTabRefreshInterval: TimeInterval = 1.5
     private let slackItemRefreshInterval: TimeInterval = 1.5
+    private let messagesChatRefreshInterval: TimeInterval = 2.0
 
     init() {
         setupWorkspaceObservers()
@@ -86,6 +91,7 @@ class WindowManager: ObservableObject {
             let terminalApp = runningApps.first { $0.bundleIdentifier == Self.terminalBundleID }
             let chromeApp = runningApps.first { $0.bundleIdentifier == Self.chromeBundleID }
             let slackApp = runningApps.first { $0.bundleIdentifier == Self.slackBundleID }
+            let messagesApp = runningApps.first { $0.bundleIdentifier == Self.messagesBundleID }
 
             // Process apps in parallel for speed
             let queue = DispatchQueue(label: "window-enumeration", attributes: .concurrent)
@@ -161,9 +167,35 @@ class WindowManager: ObservableObject {
             // Wait for all apps to be processed
             group.wait()
 
-            newWindows.append(contentsOf: self.terminalTabs(for: terminalApp))
-            newWindows.append(contentsOf: self.chromeTabs(for: chromeApp))
-            newWindows.append(contentsOf: self.slackItems(for: slackApp))
+            let cachedItemGroup = DispatchGroup()
+            let cachedItemLock = NSLock()
+            var terminalTabItems: [WindowInfo] = []
+            var chromeTabItems: [WindowInfo] = []
+            var slackWindowItems: [WindowInfo] = []
+            var messagesChatItems: [WindowInfo] = []
+
+            func loadCachedItems(_ loader: @escaping () -> [WindowInfo], assign: @escaping ([WindowInfo]) -> Void) {
+                cachedItemGroup.enter()
+                queue.async {
+                    defer { cachedItemGroup.leave() }
+                    let items = loader()
+                    cachedItemLock.lock()
+                    assign(items)
+                    cachedItemLock.unlock()
+                }
+            }
+
+            loadCachedItems({ self.terminalTabs(for: terminalApp) }) { terminalTabItems = $0 }
+            loadCachedItems({ self.chromeTabs(for: chromeApp) }) { chromeTabItems = $0 }
+            loadCachedItems({ self.slackItems(for: slackApp) }) { slackWindowItems = $0 }
+            loadCachedItems({ self.messagesChats(for: messagesApp) }) { messagesChatItems = $0 }
+
+            cachedItemGroup.wait()
+
+            newWindows.append(contentsOf: terminalTabItems)
+            newWindows.append(contentsOf: chromeTabItems)
+            newWindows.append(contentsOf: slackWindowItems)
+            newWindows.append(contentsOf: messagesChatItems)
 
             // Reassign IDs after all windows collected
             for (index, window) in newWindows.enumerated() {
@@ -213,6 +245,9 @@ class WindowManager: ObservableObject {
             return
         case let .slackDM(workspace, name):
             activateSlackSidebarItem(workspace: workspace, itemName: name, itemKind: .slackDM(workspace: workspace, name: name), processID: window.processID)
+            return
+        case let .messagesChat(_, handle, serviceType):
+            activateMessagesChat(handle: handle, serviceType: serviceType, processID: window.processID)
             return
         case .window, .terminalTab, .chromeTab:
             break
@@ -413,6 +448,117 @@ class WindowManager: ObservableObject {
         return result
     }
 
+    private func messagesChats(for messagesApp: NSRunningApplication?) -> [WindowInfo] {
+        guard let messagesApp else {
+            messagesChatCacheLock.lock()
+            cachedMessagesChats = []
+            lastMessagesChatRefresh = Date.distantPast
+            messagesChatCacheLock.unlock()
+            return []
+        }
+
+        let now = Date()
+        messagesChatCacheLock.lock()
+        let shouldRefresh = cachedMessagesChats.isEmpty || now.timeIntervalSince(lastMessagesChatRefresh) >= messagesChatRefreshInterval
+        let cachedChats = cachedMessagesChats
+        messagesChatCacheLock.unlock()
+
+        guard shouldRefresh else {
+            return cachedChats
+        }
+
+        let refreshedChats = fetchMessagesChats(messagesPID: messagesApp.processIdentifier, icon: messagesApp.icon)
+
+        messagesChatCacheLock.lock()
+        cachedMessagesChats = refreshedChats
+        lastMessagesChatRefresh = now
+        let result = cachedMessagesChats
+        messagesChatCacheLock.unlock()
+
+        return result
+    }
+
+    private func fetchMessagesChats(messagesPID: pid_t, icon: NSImage?) -> [WindowInfo] {
+        let script = """
+        tell application "Messages"
+            set outputLines to {}
+            repeat with currentChat in chats
+                set chatID to id of currentChat
+                set serviceName to (service type of account of currentChat) as text
+                set chatName to ""
+                set participantName to ""
+                set participantFullName to ""
+                set participantHandle to ""
+                try
+                    set chatName to name of currentChat
+                end try
+                try
+                    set chatParticipant to first participant of currentChat
+                    try
+                        set participantName to name of chatParticipant
+                    end try
+                    try
+                        set participantFullName to full name of chatParticipant
+                    end try
+                    try
+                        set participantHandle to handle of chatParticipant
+                    end try
+                end try
+                set end of outputLines to (chatID & tab & serviceName & tab & chatName & tab & participantName & tab & participantFullName & tab & participantHandle)
+            end repeat
+            set AppleScript's text item delimiters to linefeed
+            set outputText to outputLines as text
+            set AppleScript's text item delimiters to ""
+            return outputText
+        end tell
+        """
+
+        guard let output = runAppleScript(script) else {
+            return []
+        }
+
+        var chats: [WindowInfo] = []
+        var seenHandles = Set<String>()
+
+        for rawLine in output.split(separator: "\n", omittingEmptySubsequences: true) {
+            let columns = rawLine.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+            guard columns.count >= 6 else { continue }
+
+            let chatID = columns[0].trimmingCharacters(in: .whitespacesAndNewlines)
+            let serviceType = columns[1].trimmingCharacters(in: .whitespacesAndNewlines)
+            let chatName = normalizeMessagesScriptValue(columns[2])
+            let participantName = normalizeMessagesScriptValue(columns[3])
+            let participantFullName = normalizeMessagesScriptValue(columns[4])
+            let handle = normalizeMessagesScriptValue(columns[5])
+
+            guard !chatID.isEmpty, !handle.isEmpty, seenHandles.insert(handle).inserted else {
+                continue
+            }
+
+            let title = preferredMessagesChatTitle(chatName: chatName, participantName: participantName, participantFullName: participantFullName, handle: handle)
+            let subtitle = "Messages chat · \(serviceType)"
+            let detailText = ["messages", "message", "text", "chat", serviceType, handle, participantName, participantFullName]
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
+
+            chats.append(
+                WindowInfo(
+                    id: 0,
+                    title: title,
+                    ownerName: "Messages",
+                    processID: messagesPID,
+                    windowNumber: 0,
+                    kind: .messagesChat(chatID: chatID, handle: handle, serviceType: serviceType),
+                    subtitle: subtitle,
+                    detailText: detailText,
+                    icon: icon
+                )
+            )
+        }
+
+        return chats
+    }
+
     private func fetchSlackItems(slackPID: pid_t, icon: NSImage?) -> [WindowInfo] {
         let axApp = AXUIElementCreateApplication(slackPID)
         guard let axWindows = copyAttribute(axApp, attribute: kAXWindowsAttribute) as? [AXUIElement],
@@ -463,7 +609,7 @@ class WindowManager: ObservableObject {
                 case .slackChannel:
                     subtitle = sidebarItem.unreadCount > 0 ? "Slack channel · \(workspaceName) · \(sidebarItem.unreadCount) unread" : "Slack channel · \(workspaceName)"
                     typeTokens = ["slack", "chan", "channel"]
-                case .window, .terminalTab, .chromeTab, .slackWorkspace:
+                case .window, .terminalTab, .chromeTab, .slackWorkspace, .messagesChat:
                     continue
                 }
 
@@ -594,6 +740,18 @@ class WindowManager: ObservableObject {
         }
 
         AXUIElementPerformAction(row, kAXPressAction as CFString)
+    }
+
+    private func activateMessagesChat(handle: String, serviceType: String, processID: pid_t) {
+        NSRunningApplication(processIdentifier: processID)?.activate()
+
+        let scheme = serviceType.lowercased() == "sms" ? "sms" : "imessage"
+        guard let encodedHandle = handle.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: "\(scheme):\(encodedHandle)") else {
+            return
+        }
+
+        NSWorkspace.shared.open(url)
     }
 
     private func matchingTerminalWindow(in windows: [AXUIElement], windowTitle: String, tabTitle: String, tabIndex: Int) -> AXUIElement? {
@@ -1147,6 +1305,38 @@ class WindowManager: ObservableObject {
         }
 
         return names.contains(kAXPressAction as String)
+    }
+
+    private func runAppleScript(_ source: String) -> String? {
+        guard let script = NSAppleScript(source: source) else {
+            return nil
+        }
+
+        var error: NSDictionary?
+        let result = script.executeAndReturnError(&error)
+        if error != nil {
+            return nil
+        }
+
+        return result.stringValue
+    }
+
+    private func normalizeMessagesScriptValue(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed == "missing value" ? "" : trimmed
+    }
+
+    private func preferredMessagesChatTitle(chatName: String, participantName: String, participantFullName: String, handle: String) -> String {
+        if !chatName.isEmpty {
+            return chatName
+        }
+        if !participantFullName.isEmpty {
+            return participantFullName
+        }
+        if !participantName.isEmpty {
+            return participantName
+        }
+        return handle
     }
 
     private func firstPressableDescendant(in element: AXUIElement, depthRemaining: Int = 6) -> AXUIElement? {

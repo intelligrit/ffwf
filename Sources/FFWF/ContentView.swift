@@ -70,10 +70,12 @@ struct ContentView: View {
                 prefix = "channel"
             case .slackDM:
                 prefix = "dm"
-            case .window, .terminalTab, .chromeTab:
+            case .window, .terminalTab, .chromeTab, .messagesChat:
                 prefix = "item"
             }
             announcement = "\(prefix) \(title), Slack"
+        } else if item.isMessagesItem {
+            announcement = "message \(title), Messages"
         } else {
             let app = item.title.isEmpty ? "" : ", \(item.ownerName)"
             announcement = "\(title)\(app)"
@@ -91,14 +93,14 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Search field
-            TextField("Search windows, tabs, and Slack...", text: $searchQuery)
+            TextField("Search windows, tabs, Slack, and Messages...", text: $searchQuery)
                 .textFieldStyle(.plain)
                 .font(.system(size: 18))
                 .padding(12)
                 .background(Color(NSColor.controlBackgroundColor))
                 .focused($isSearchFocused)
-                .accessibilityLabel("Search for windows, tabs, and Slack items")
-                .accessibilityHint("Type to filter windows, tabs, Slack workspaces, channels, direct messages, and application names")
+                .accessibilityLabel("Search for windows, tabs, Slack items, and Messages chats")
+                .accessibilityHint("Type to filter windows, tabs, Slack workspaces, channels, direct messages, Messages chats, and application names")
                 .accessibilityValue(searchQuery.isEmpty ? "Empty" : searchQuery)
                 .onSubmit {
                     // If in history mode, select the highlighted history item
@@ -332,6 +334,8 @@ struct WindowRow: View {
             role = "Channel"
         case .slackDM:
             role = "Direct message"
+        case .messagesChat:
+            role = "Message"
         case .window:
             role = "Window"
         }
@@ -356,11 +360,15 @@ struct WindowRow: View {
                 prefix = "channel"
             case .slackDM:
                 prefix = "dm"
-            case .window, .terminalTab, .chromeTab:
+            case .window, .terminalTab, .chromeTab, .messagesChat:
                 prefix = "item"
             }
             let subtitle = window.subtitle.map { ", \($0)" } ?? ""
             return "\(prefix) \(title)\(subtitle), Slack. \(position)\(state)"
+        }
+        if window.isMessagesItem {
+            let subtitle = window.subtitle.map { ", \($0)" } ?? ""
+            return "message \(title)\(subtitle), Messages. \(position)\(state)"
         }
         return "\(title)\(app). \(position)\(state)"
     }
@@ -420,7 +428,11 @@ struct WindowRow: View {
             return "TAB"
         }
 
-        return window.slackBadgeText
+        if let slackBadge = window.slackBadgeText {
+            return slackBadge
+        }
+
+        return window.messagesBadgeText
     }
 
     private var accessibilityHintText: String {
@@ -433,6 +445,8 @@ struct WindowRow: View {
             return "Press Enter to open this Slack channel"
         case .slackDM:
             return "Press Enter to open this Slack direct message"
+        case .messagesChat:
+            return "Press Enter to open this Messages chat"
         case .window:
             return "Press Enter to switch to this window"
         }

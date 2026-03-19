@@ -10,3 +10,4 @@ DerivedData/
 
 # Build artifacts
 FFWF.app/
+*.dmg

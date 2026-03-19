@@ -4,6 +4,7 @@ import AppKit
 enum WindowKind: Hashable {
     case window
     case terminalTab(windowTitle: String, tabTitle: String, tabIndex: Int)
+    case chromeTab(windowTitle: String, tabTitle: String, tabIndex: Int)
 }
 
 struct WindowInfo: Identifiable, Hashable {
@@ -79,8 +80,24 @@ struct WindowInfo: Identifiable, Hashable {
         return "\(ownerName): \(title)"
     }
 
+    var isTab: Bool {
+        switch kind {
+        case .terminalTab, .chromeTab:
+            return true
+        case .window:
+            return false
+        }
+    }
+
     var isTerminalTab: Bool {
         if case .terminalTab = kind {
+            return true
+        }
+        return false
+    }
+
+    var isChromeTab: Bool {
+        if case .chromeTab = kind {
             return true
         }
         return false
@@ -91,6 +108,15 @@ struct WindowInfo: Identifiable, Hashable {
             return tabIndex
         }
         return nil
+    }
+
+    var tabIndex: Int? {
+        switch kind {
+        case .terminalTab(_, _, let tabIndex), .chromeTab(_, _, let tabIndex):
+            return tabIndex
+        case .window:
+            return nil
+        }
     }
 }
 

@@ -4,15 +4,20 @@ import ApplicationServices
 class WindowManager: ObservableObject {
     static let shared = WindowManager()
     private static let terminalBundleID = "com.apple.Terminal"
+    private static let chromeBundleID = "com.google.Chrome"
     private static let maxTabSearchDepth = 4
 
     @Published var windows: [WindowInfo] = []
     private var isRefreshing = false
     private let refreshLock = NSLock()
     private let terminalTabCacheLock = NSLock()
+    private let chromeTabCacheLock = NSLock()
     private var cachedTerminalTabs: [WindowInfo] = []
+    private var cachedChromeTabs: [WindowInfo] = []
     private var lastTerminalTabRefresh = Date.distantPast
+    private var lastChromeTabRefresh = Date.distantPast
     private let terminalTabRefreshInterval: TimeInterval = 1.5
+    private let chromeTabRefreshInterval: TimeInterval = 1.5
 
     init() {
         setupWorkspaceObservers()
@@ -74,6 +79,7 @@ class WindowManager: ObservableObject {
 
             print("  Found \(runningApps.count) running apps to enumerate")
             let terminalApp = runningApps.first { $0.bundleIdentifier == Self.terminalBundleID }
+            let chromeApp = runningApps.first { $0.bundleIdentifier == Self.chromeBundleID }
 
             // Process apps in parallel for speed
             let queue = DispatchQueue(label: "window-enumeration", attributes: .concurrent)
@@ -87,6 +93,7 @@ class WindowManager: ObservableObject {
                     let pid = app.processIdentifier
                     let appName = app.localizedName ?? "Unknown"
                     let isTerminal = app.bundleIdentifier == Self.terminalBundleID
+                    let isChrome = app.bundleIdentifier == Self.chromeBundleID
 
                     // Use AX API to get windows for this app
                     let axApp = AXUIElementCreateApplication(pid)
@@ -118,6 +125,9 @@ class WindowManager: ObservableObject {
                         if isTerminal, self.shouldHideTerminalWindow(axWindow: axWindow, windowTitle: title) {
                             continue
                         }
+                        if isChrome, self.shouldHideChromeWindow(axWindow: axWindow, windowTitle: title) {
+                            continue
+                        }
 
                         let windowInfo = WindowInfo(
                             id: 0, // Will be reassigned after sorting
@@ -142,6 +152,7 @@ class WindowManager: ObservableObject {
             group.wait()
 
             newWindows.append(contentsOf: self.terminalTabs(for: terminalApp))
+            newWindows.append(contentsOf: self.chromeTabs(for: chromeApp))
 
             // Reassign IDs after all windows collected
             for (index, window) in newWindows.enumerated() {
@@ -176,6 +187,10 @@ class WindowManager: ObservableObject {
     func activateWindow(_ window: WindowInfo) {
         if case let .terminalTab(windowTitle, tabTitle, tabIndex) = window.kind {
             activateTerminalTab(windowTitle: windowTitle, tabTitle: tabTitle, tabIndex: tabIndex, processID: window.processID)
+            return
+        }
+        if case let .chromeTab(windowTitle, tabTitle, tabIndex) = window.kind {
+            activateChromeTab(windowTitle: windowTitle, tabTitle: tabTitle, tabIndex: tabIndex, processID: window.processID)
             return
         }
 
@@ -277,6 +292,73 @@ class WindowManager: ObservableObject {
         return terminalTabs
     }
 
+    private func chromeTabs(for chromeApp: NSRunningApplication?) -> [WindowInfo] {
+        guard let chromeApp else {
+            chromeTabCacheLock.lock()
+            cachedChromeTabs = []
+            lastChromeTabRefresh = Date.distantPast
+            chromeTabCacheLock.unlock()
+            return []
+        }
+
+        let now = Date()
+        chromeTabCacheLock.lock()
+        let shouldRefresh = cachedChromeTabs.isEmpty || now.timeIntervalSince(lastChromeTabRefresh) >= chromeTabRefreshInterval
+        let cachedTabs = cachedChromeTabs
+        chromeTabCacheLock.unlock()
+
+        guard shouldRefresh else {
+            return cachedTabs
+        }
+
+        let refreshedTabs = fetchChromeTabs(chromePID: chromeApp.processIdentifier, icon: chromeApp.icon)
+
+        chromeTabCacheLock.lock()
+        cachedChromeTabs = refreshedTabs
+        lastChromeTabRefresh = now
+        let result = cachedChromeTabs
+        chromeTabCacheLock.unlock()
+
+        return result
+    }
+
+    private func fetchChromeTabs(chromePID: pid_t, icon: NSImage?) -> [WindowInfo] {
+        let axApp = AXUIElementCreateApplication(chromePID)
+        guard let axWindows = copyAttribute(axApp, attribute: kAXWindowsAttribute) as? [AXUIElement] else {
+            return []
+        }
+
+        var chromeTabs: [WindowInfo] = []
+
+        for axWindow in axWindows {
+            let windowTitle = stringAttribute(axWindow, attribute: kAXTitleAttribute).trimmingCharacters(in: .whitespacesAndNewlines)
+            let tabButtons = chromeTabButtons(in: axWindow)
+
+            for (index, tabButton) in tabButtons.enumerated() {
+                let tabTitle = chromeTabTitle(for: tabButton)
+                guard !tabTitle.isEmpty else { continue }
+
+                let subtitle = "Chrome tab \(index + 1)"
+                let detailText = windowTitle.isEmpty ? subtitle : windowTitle
+                chromeTabs.append(
+                    WindowInfo(
+                        id: 0,
+                        title: tabTitle,
+                        ownerName: "Google Chrome",
+                        processID: chromePID,
+                        windowNumber: 0,
+                        kind: .chromeTab(windowTitle: windowTitle, tabTitle: tabTitle, tabIndex: index + 1),
+                        subtitle: subtitle,
+                        detailText: detailText,
+                        icon: icon
+                    )
+                )
+            }
+        }
+
+        return chromeTabs
+    }
+
     private func activateTerminalTab(windowTitle: String, tabTitle: String, tabIndex: Int, processID: pid_t) {
         let app = NSRunningApplication(processIdentifier: processID)
         app?.activate()
@@ -298,6 +380,29 @@ class WindowManager: ObservableObject {
         if let tabButton = matchingTerminalTabButton(in: tabButtons, tabTitle: tabTitle, tabIndex: tabIndex) {
             AXUIElementPerformAction(tabButton, kAXPressAction as CFString)
             return
+        }
+    }
+
+    private func activateChromeTab(windowTitle: String, tabTitle: String, tabIndex: Int, processID: pid_t) {
+        let app = NSRunningApplication(processIdentifier: processID)
+        app?.activate()
+
+        let axApp = AXUIElementCreateApplication(processID)
+        guard let axWindows = copyAttribute(axApp, attribute: kAXWindowsAttribute) as? [AXUIElement] else {
+            return
+        }
+
+        let targetWindow = matchingChromeWindow(in: axWindows, windowTitle: windowTitle, tabTitle: tabTitle, tabIndex: tabIndex)
+        guard let targetWindow else {
+            return
+        }
+
+        AXUIElementSetAttributeValue(targetWindow, kAXMainAttribute as CFString, kCFBooleanTrue)
+        AXUIElementPerformAction(targetWindow, kAXRaiseAction as CFString)
+
+        let tabButtons = chromeTabButtons(in: targetWindow)
+        if let tabButton = matchingChromeTabButton(in: tabButtons, tabTitle: tabTitle, tabIndex: tabIndex) {
+            AXUIElementPerformAction(tabButton, kAXPressAction as CFString)
         }
     }
 
@@ -324,6 +429,29 @@ class WindowManager: ObservableObject {
         return tabButtons.first { stringAttribute($0, attribute: kAXTitleAttribute) == tabTitle }
     }
 
+    private func matchingChromeWindow(in windows: [AXUIElement], windowTitle: String, tabTitle: String, tabIndex: Int) -> AXUIElement? {
+        if !windowTitle.isEmpty,
+           let titleMatched = windows.first(where: { stringAttribute($0, attribute: kAXTitleAttribute) == windowTitle && chromeTabButtons(in: $0).count >= tabIndex }) {
+            return titleMatched
+        }
+
+        return windows.first { window in
+            let tabButtons = chromeTabButtons(in: window)
+            return matchingChromeTabButton(in: tabButtons, tabTitle: tabTitle, tabIndex: tabIndex) != nil
+        }
+    }
+
+    private func matchingChromeTabButton(in tabButtons: [AXUIElement], tabTitle: String, tabIndex: Int) -> AXUIElement? {
+        if tabIndex > 0, tabIndex <= tabButtons.count {
+            let indexedButton = tabButtons[tabIndex - 1]
+            if chromeTabTitle(for: indexedButton) == tabTitle {
+                return indexedButton
+            }
+        }
+
+        return tabButtons.first { chromeTabTitle(for: $0) == tabTitle }
+    }
+
     private func shouldHideTerminalWindow(axWindow: AXUIElement, windowTitle: String) -> Bool {
         guard let selectedTab = selectedTerminalTabButton(in: axWindow) else {
             return false
@@ -337,8 +465,27 @@ class WindowManager: ObservableObject {
         return windowTitle.trimmingCharacters(in: .whitespacesAndNewlines) == selectedTabTitle
     }
 
+    private func shouldHideChromeWindow(axWindow: AXUIElement, windowTitle: String) -> Bool {
+        guard let selectedTab = selectedChromeTabButton(in: axWindow) else {
+            return false
+        }
+
+        let selectedTabTitle = chromeTabTitle(for: selectedTab)
+        guard !selectedTabTitle.isEmpty else {
+            return false
+        }
+
+        return windowTitle.trimmingCharacters(in: .whitespacesAndNewlines) == selectedTabTitle
+    }
+
     private func selectedTerminalTabButton(in window: AXUIElement) -> AXUIElement? {
         let tabButtons = terminalTabButtons(in: window)
+        return tabButtons.first(where: { boolAttribute($0, attribute: kAXSelectedAttribute) })
+            ?? tabButtons.first(where: { boolAttribute($0, attribute: kAXValueAttribute) })
+    }
+
+    private func selectedChromeTabButton(in window: AXUIElement) -> AXUIElement? {
+        let tabButtons = chromeTabButtons(in: window)
         return tabButtons.first(where: { boolAttribute($0, attribute: kAXSelectedAttribute) })
             ?? tabButtons.first(where: { boolAttribute($0, attribute: kAXValueAttribute) })
     }
@@ -353,6 +500,16 @@ class WindowManager: ObservableObject {
             stringAttribute($0, attribute: kAXRoleAttribute) == kAXRadioButtonRole &&
             stringAttribute($0, attribute: kAXSubroleAttribute) == "AXTabButton"
         }
+    }
+
+    private func chromeTabButtons(in window: AXUIElement) -> [AXUIElement] {
+        guard let tabGroup = findChromeTabGroup(in: window, depthRemaining: Self.maxTabSearchDepth),
+              let tabListContainer = firstChromeTabListContainer(in: tabGroup),
+              let tabButtons = findChromeTabButtons(in: tabListContainer, depthRemaining: Self.maxTabSearchDepth) else {
+            return []
+        }
+
+        return tabButtons
     }
 
     private func findTerminalTabGroup(in element: AXUIElement, depthRemaining: Int) -> AXUIElement? {
@@ -373,6 +530,57 @@ class WindowManager: ObservableObject {
         }
 
         return nil
+    }
+
+    private func findChromeTabGroup(in element: AXUIElement, depthRemaining: Int) -> AXUIElement? {
+        findTerminalTabGroup(in: element, depthRemaining: depthRemaining)
+    }
+
+    private func firstChromeTabListContainer(in tabGroup: AXUIElement) -> AXUIElement? {
+        guard let children = copyAttribute(tabGroup, attribute: kAXChildrenAttribute) as? [AXUIElement] else {
+            return nil
+        }
+
+        return children.first { child in
+            if let childChildren = copyAttribute(child, attribute: kAXChildrenAttribute) as? [AXUIElement] {
+                return childChildren.contains {
+                    stringAttribute($0, attribute: kAXRoleAttribute) == kAXRadioButtonRole &&
+                    stringAttribute($0, attribute: kAXSubroleAttribute) == "AXTabButton"
+                }
+            }
+            return false
+        }
+    }
+
+    private func findChromeTabButtons(in element: AXUIElement, depthRemaining: Int) -> [AXUIElement]? {
+        guard depthRemaining >= 0 else { return nil }
+
+        if let children = copyAttribute(element, attribute: kAXChildrenAttribute) as? [AXUIElement] {
+            let tabButtons = children.filter {
+                stringAttribute($0, attribute: kAXRoleAttribute) == kAXRadioButtonRole &&
+                stringAttribute($0, attribute: kAXSubroleAttribute) == "AXTabButton"
+            }
+            if !tabButtons.isEmpty {
+                return tabButtons
+            }
+
+            for child in children {
+                if let found = findChromeTabButtons(in: child, depthRemaining: depthRemaining - 1), !found.isEmpty {
+                    return found
+                }
+            }
+        }
+
+        return nil
+    }
+
+    private func chromeTabTitle(for element: AXUIElement) -> String {
+        let title = stringAttribute(element, attribute: kAXTitleAttribute).trimmingCharacters(in: .whitespacesAndNewlines)
+        if !title.isEmpty {
+            return title
+        }
+
+        return stringAttribute(element, attribute: kAXDescriptionAttribute).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func copyAttribute(_ element: AXUIElement, attribute: String) -> AnyObject? {

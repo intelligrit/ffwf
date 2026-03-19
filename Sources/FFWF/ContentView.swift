@@ -53,9 +53,9 @@ struct ContentView: View {
         let item = filteredItems[selectedIndex].window
         let title = item.title.isEmpty ? item.ownerName : item.title
         let announcement: String
-        if item.isTerminalTab {
+        if item.isTab {
             let tabPrefix: String
-            if let tabIndex = item.terminalTabIndex {
+            if let tabIndex = item.tabIndex {
                 tabPrefix = "tab \(tabIndex)"
             } else {
                 tabPrefix = "tab"
@@ -309,12 +309,12 @@ struct WindowRow: View {
     var accessibilityDescription: String {
         let title = window.title.isEmpty ? window.ownerName : window.title
         let app = window.title.isEmpty ? "" : ", \(window.ownerName)"
-        let role = window.isTerminalTab ? "Tab" : "Window"
+        let role = window.isTab ? "Tab" : "Window"
         let position = "\(role) \(index) of \(total)"
         let state = isSelected ? ", selected" : ""
-        if window.isTerminalTab {
+        if window.isTab {
             let tabPrefix: String
-            if let tabIndex = window.terminalTabIndex {
+            if let tabIndex = window.tabIndex {
                 tabPrefix = "tab \(tabIndex)"
             } else {
                 tabPrefix = "tab"
@@ -337,7 +337,7 @@ struct WindowRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
-                    if window.isTerminalTab {
+                    if window.isTab {
                         Text("TAB")
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundColor(.accentColor)
@@ -371,7 +371,7 @@ struct WindowRow: View {
         .cornerRadius(4)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
-        .accessibilityHint(window.isTerminalTab ? "Press Enter to switch to this tab" : "Press Enter to switch to this window")
+        .accessibilityHint(window.isTab ? "Press Enter to switch to this tab" : "Press Enter to switch to this window")
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : [.isButton])
     }
 }

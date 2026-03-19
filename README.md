@@ -16,13 +16,14 @@ A blazing-fast macOS menu bar app for switching windows with fuzzy search. Built
 
 - **Menu Bar App** - Always accessible, runs in the background
 - **Configurable Global Hotkey** - Default: Option+Shift+Space (customizable in Settings)
-- **Lightning-Fast Fuzzy Matching** - Search window titles and application names instantly
+- **Lightning-Fast Fuzzy Matching** - Search windows, tabs, chats, and app targets instantly
 - **Multi-Term Search** - Space-separated terms for precise filtering
 - **Smart Prioritization** - Exact and prefix matches ranked higher
 - **Event-Driven Updates** - Window list updates automatically when apps launch/quit
 - **Keyboard Navigation** - Arrow keys + Enter for quick switching
 - **Visual Feedback** - App icons and highlighted selection
 - **Accessibility Support** - Full VoiceOver support with screen reader announcements
+- **App-Specific Targets** - Terminal tabs, Chrome tabs, Slack workspaces/channels/DMs, and Messages chats
 - **Zero Overhead** - Background refresh only when popover is open
 
 ## Quick Start
@@ -101,7 +102,7 @@ Grant these permissions when prompted, then restart the app.
 
 1. **Launch** - FFWF appears as a magnifying glass icon in your menu bar
 2. **Activate** - Click the icon or press your configured hotkey (default: Option+Shift+Space)
-3. **Search** - Type to fuzzy filter windows by title or app name
+3. **Search** - Type to fuzzy filter windows, tabs, Slack targets, and Messages chats
 4. **Navigate** - Use ↑/↓ arrow keys to select
 5. **Switch** - Press Enter to activate the selected window
 6. **Cancel** - Press Escape to hide without switching
@@ -119,6 +120,15 @@ Grant these permissions when prompted, then restart the app.
 - **Multi-term search**: Use spaces to search multiple terms (e.g., "safari readme" matches "README.md - Safari")
 - **Prefix boost**: Terms matching the start of words rank higher
 - **Exact match**: Exact matches appear first
+- **Targeted app search**: Queries like `slack dm`, `tab scratch`, or `messages jay` narrow to app-specific results
+
+### Supported Targets
+
+- **Standard windows**: Regular macOS app windows discovered through Accessibility APIs
+- **Terminal**: Individual tabs in Terminal windows
+- **Google Chrome**: Individual browser tabs
+- **Slack**: Visible workspaces, channels, and direct messages
+- **Messages**: Existing chats opened through Messages scripting and URL routing
 
 ## Development
 
@@ -170,8 +180,9 @@ make run
 - Uses AX API (`AXUIElement`) to enumerate windows per application
 - NSWorkspace observers for app launch/quit/activate events
 - 0.5s background refresh while popover is visible
-- Parallel processing with `DispatchQueue.concurrentPerform`
+- Parallel processing for both window enumeration and cached target refreshes
 - Caches app icons for performance
+- Uses app-specific integrations for Terminal, Chrome, Slack, and Messages targets
 
 **ContentView**
 - Real-time fuzzy filtering on every keystroke
@@ -193,12 +204,13 @@ make run
 
 ### Performance Optimizations
 
-1. **Pre-lowercased Strings** - Window titles/names lowercased once during enumeration
+1. **Pre-lowercased Strings** - Window titles and search text are lowercased once during enumeration
 2. **Concurrent Enumeration** - Processes applications in parallel
-3. **Early Returns** - Fuzzy matcher bails on non-matches immediately
-4. **Icon Caching** - App icons fetched once per app, not per window
-5. **Event-Driven Updates** - NSWorkspace observers instead of constant polling
-6. **Efficient Diffing** - SwiftUI List uses stable IDs for minimal re-renders
+3. **Concurrent Target Refreshes** - Terminal, Chrome, Slack, and Messages target caches refresh in parallel
+4. **Early Returns** - Fuzzy matcher bails on non-matches immediately
+5. **Icon Caching** - App icons fetched once per app, not per window
+6. **Event-Driven Updates** - NSWorkspace observers instead of constant polling
+7. **Efficient Diffing** - SwiftUI List uses stable IDs for minimal re-renders
 
 ## Makefile Targets
 
@@ -227,13 +239,13 @@ Contributions welcome! Please:
 
 ## Future Enhancements
 
-- [ ] Browser tab enumeration (requires browser extensions)
 - [ ] MRU (Most Recently Used) sorting option
 - [ ] Window preview thumbnails on hover
 - [ ] Custom app icon
 - [ ] Blacklist/whitelist for specific apps
 - [ ] Multiple hotkey profiles
 - [ ] Export/import settings
+- [ ] Additional app-specific targets beyond Terminal, Chrome, Slack, and Messages
 
 ## License
 

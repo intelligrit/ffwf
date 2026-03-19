@@ -61,6 +61,19 @@ struct ContentView: View {
                 tabPrefix = "tab"
             }
             announcement = "\(tabPrefix) \(title), \(item.ownerName)"
+        } else if item.isSlackItem {
+            let prefix: String
+            switch item.kind {
+            case .slackWorkspace:
+                prefix = "workspace"
+            case .slackChannel:
+                prefix = "channel"
+            case .slackDM:
+                prefix = "dm"
+            case .window, .terminalTab, .chromeTab:
+                prefix = "item"
+            }
+            announcement = "\(prefix) \(title), Slack"
         } else {
             let app = item.title.isEmpty ? "" : ", \(item.ownerName)"
             announcement = "\(title)\(app)"
@@ -78,14 +91,14 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Search field
-            TextField("Search windows and tabs...", text: $searchQuery)
+            TextField("Search windows, tabs, and Slack...", text: $searchQuery)
                 .textFieldStyle(.plain)
                 .font(.system(size: 18))
                 .padding(12)
                 .background(Color(NSColor.controlBackgroundColor))
                 .focused($isSearchFocused)
-                .accessibilityLabel("Search for windows and tabs")
-                .accessibilityHint("Type to filter windows, tabs, and application names")
+                .accessibilityLabel("Search for windows, tabs, and Slack items")
+                .accessibilityHint("Type to filter windows, tabs, Slack workspaces, channels, direct messages, and application names")
                 .accessibilityValue(searchQuery.isEmpty ? "Empty" : searchQuery)
                 .onSubmit {
                     // If in history mode, select the highlighted history item
@@ -309,7 +322,19 @@ struct WindowRow: View {
     var accessibilityDescription: String {
         let title = window.title.isEmpty ? window.ownerName : window.title
         let app = window.title.isEmpty ? "" : ", \(window.ownerName)"
-        let role = window.isTab ? "Tab" : "Window"
+        let role: String
+        switch window.kind {
+        case .terminalTab, .chromeTab:
+            role = "Tab"
+        case .slackWorkspace:
+            role = "Workspace"
+        case .slackChannel:
+            role = "Channel"
+        case .slackDM:
+            role = "Direct message"
+        case .window:
+            role = "Window"
+        }
         let position = "\(role) \(index) of \(total)"
         let state = isSelected ? ", selected" : ""
         if window.isTab {
@@ -321,6 +346,21 @@ struct WindowRow: View {
             }
             let subtitle = window.subtitle.map { ", \($0)" } ?? ""
             return "\(tabPrefix) \(title)\(subtitle)\(app). \(position)\(state)"
+        }
+        if window.isSlackItem {
+            let prefix: String
+            switch window.kind {
+            case .slackWorkspace:
+                prefix = "workspace"
+            case .slackChannel:
+                prefix = "channel"
+            case .slackDM:
+                prefix = "dm"
+            case .window, .terminalTab, .chromeTab:
+                prefix = "item"
+            }
+            let subtitle = window.subtitle.map { ", \($0)" } ?? ""
+            return "\(prefix) \(title)\(subtitle), Slack. \(position)\(state)"
         }
         return "\(title)\(app). \(position)\(state)"
     }
@@ -337,8 +377,8 @@ struct WindowRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
-                    if window.isTab {
-                        Text("TAB")
+                    if let badgeText = rowBadgeText {
+                        Text(badgeText)
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundColor(.accentColor)
                             .padding(.horizontal, 6)
@@ -371,7 +411,30 @@ struct WindowRow: View {
         .cornerRadius(4)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
-        .accessibilityHint(window.isTab ? "Press Enter to switch to this tab" : "Press Enter to switch to this window")
+        .accessibilityHint(accessibilityHintText)
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : [.isButton])
+    }
+
+    private var rowBadgeText: String? {
+        if window.isTab {
+            return "TAB"
+        }
+
+        return window.slackBadgeText
+    }
+
+    private var accessibilityHintText: String {
+        switch window.kind {
+        case .terminalTab, .chromeTab:
+            return "Press Enter to switch to this tab"
+        case .slackWorkspace:
+            return "Press Enter to switch to this Slack workspace"
+        case .slackChannel:
+            return "Press Enter to open this Slack channel"
+        case .slackDM:
+            return "Press Enter to open this Slack direct message"
+        case .window:
+            return "Press Enter to switch to this window"
+        }
     }
 }

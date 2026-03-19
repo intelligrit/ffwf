@@ -31,32 +31,12 @@ struct FuzzyMatcher {
         if windows.count > 50 {
             // Parallel processing for large lists
             matches = windows.concurrentCompactMap { window in
-                let titleScore = matchPreLowered(query: query, againstLower: window.titleLower, original: window.title) ?? 0
-                let ownerScore = matchPreLowered(query: query, againstLower: window.ownerNameLower, original: window.ownerName) ?? 0
-                let subtitleScore = matchPreLowered(query: query, againstLower: window.subtitleLower, original: window.subtitle ?? "") ?? 0
-                let detailScore = matchPreLowered(query: query, againstLower: window.detailTextLower, original: window.detailText) ?? 0
-
-                // Prefer title matches over app name matches (1.5x multiplier)
-                let weightedTitleScore = Int(Double(titleScore) * 1.5)
-                let bestScore = max(weightedTitleScore, ownerScore, subtitleScore, detailScore)
-
-                guard bestScore > 0 else { return nil }
-                return ScoredWindow(window: window, score: bestScore)
+                scoreWindow(window, query: query)
             }
         } else {
             // Sequential for small lists (less overhead)
             matches = windows.compactMap { window in
-                let titleScore = matchPreLowered(query: query, againstLower: window.titleLower, original: window.title) ?? 0
-                let ownerScore = matchPreLowered(query: query, againstLower: window.ownerNameLower, original: window.ownerName) ?? 0
-                let subtitleScore = matchPreLowered(query: query, againstLower: window.subtitleLower, original: window.subtitle ?? "") ?? 0
-                let detailScore = matchPreLowered(query: query, againstLower: window.detailTextLower, original: window.detailText) ?? 0
-
-                // Prefer title matches over app name matches (1.5x multiplier)
-                let weightedTitleScore = Int(Double(titleScore) * 1.5)
-                let bestScore = max(weightedTitleScore, ownerScore, subtitleScore, detailScore)
-
-                guard bestScore > 0 else { return nil }
-                return ScoredWindow(window: window, score: bestScore)
+                scoreWindow(window, query: query)
             }
         }
 
@@ -182,5 +162,31 @@ struct FuzzyMatcher {
 
         // Ensure valid matches always have positive score
         return max(score, 1)
+    }
+
+    private static func combinedSearchText(for window: WindowInfo) -> String {
+        [window.title, window.ownerName, window.subtitle ?? "", window.detailText]
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+
+    private static func scoreWindow(_ window: WindowInfo, query: String) -> ScoredWindow? {
+        let titleScore = matchPreLowered(query: query, againstLower: window.titleLower, original: window.title) ?? 0
+        let ownerScore = matchPreLowered(query: query, againstLower: window.ownerNameLower, original: window.ownerName) ?? 0
+        let subtitleScore = matchPreLowered(query: query, againstLower: window.subtitleLower, original: window.subtitle ?? "") ?? 0
+        let detailScore = matchPreLowered(query: query, againstLower: window.detailTextLower, original: window.detailText) ?? 0
+        let combinedText = combinedSearchText(for: window)
+        let combinedScore = matchPreLowered(query: query, againstLower: combinedText.lowercased(), original: combinedText) ?? 0
+
+        let weightedTitleScore = Int(Double(titleScore) * 2.2)
+        let weightedCombinedScore = Int(Double(combinedScore) * 1.2)
+        var bestScore = max(weightedTitleScore, ownerScore, subtitleScore, detailScore, weightedCombinedScore)
+
+        if case .slackWorkspace = window.kind, titleScore > 0 {
+            bestScore += 1200
+        }
+
+        guard bestScore > 0 else { return nil }
+        return ScoredWindow(window: window, score: bestScore)
     }
 }
